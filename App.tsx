@@ -51,7 +51,7 @@ const App: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <img 
-              src="https://raw.githubusercontent.com/heil-kaizen/lelantos/main/lelantos.webp" 
+              src="https://raw.githubusercontent.com/heil-kaizen/NOFace/main/lelantos.webp" 
               alt="Lelantos Logo" 
               className="w-12 h-12 rounded-full border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
             />
