@@ -4,7 +4,7 @@
 
 By analyzing the top holders of user-specified tokens, Lelantos identifies wallets that hold significant positions in multiple assets, flagging potential insider rings, coordinated marketing campaigns, or heavy whale concentration.
 
-![Lelantos](https://raw.githubusercontent.com/heil-kaizen/lelantos/main/lelantos.webp)
+![Lelantos](https://raw.githubusercontent.com/heil-kaizen/NOFace/main/lelantos.webp)
 
 ## 🎯 Goal
 
