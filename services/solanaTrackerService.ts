@@ -306,7 +306,8 @@ export class SolanaTrackerService {
             const tags: string[] = [];
 
             // Base Score: Overlaps
-            score += (overlap.tokens.length * 2);
+            // 2 tokens = 4 pts, 3 tokens = 6 pts, 4+ tokens = 8 pts
+            score += Math.min(overlap.tokens.length * 2, 8);
 
             let basicInfo: any = { total: 0 };
             let trades: any[] = [];
@@ -326,6 +327,10 @@ export class SolanaTrackerService {
             } catch (e) { console.warn(`Failed PnL for ${overlap.address}`, e); }
 
             overlap.portfolioValue = basicInfo.total || 0;
+
+            // Wealth Score Bonus
+            if ((basicInfo.total || 0) > 100000) score += 2;
+            else if ((basicInfo.total || 0) > 10000) score += 1;
 
             // NEW: Wallet Summary
             let realizedPnl = 0;
@@ -378,6 +383,10 @@ export class SolanaTrackerService {
                     winRate = Math.round((profitableTrades / totalTrades) * 100);
                 }
             }
+
+            // Performance Score Bonus
+            if (winRate > 60 && totalTrades > 5) score += 1;
+            if (totalRealizedPnl > 5000) score += 1;
 
             overlap.wallet_summary = {
                 portfolio_value_usd: basicInfo.total || 0,
