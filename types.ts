@@ -33,6 +33,10 @@ export interface WalletSummary {
   total_trades: number;
   win_rate: number;
   realized_pnl: number;
+  total_realized_pnl?: number;
+  total_unrealized_pnl?: number;
+  profitable_positions?: number;
+  losing_positions?: number;
 }
 
 export interface WalletOverlap {
