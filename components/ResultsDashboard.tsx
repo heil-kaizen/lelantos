@@ -10,6 +10,7 @@ interface ResultsDashboardProps {
 
 export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, theme = 'light' }) => {
   const [copied, setCopied] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<'score' | 'portfolio' | 'holdings'>('score');
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -17,13 +18,30 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, the
     setTimeout(() => setCopied(null), 2000);
   };
 
-  // Prepare chart data
-  const chartData = results.overlaps.map((overlap, index) => ({
-    name: `W${index + 1}`,
-    address: overlap.address,
-    score: overlap.score || 0,
-    tokens: overlap.tokens.length
-  })).slice(0, 10); 
+  // Sort logic
+  const sortedOverlaps = [...results.overlaps].sort((a, b) => {
+    switch (sortBy) {
+        case 'portfolio':
+            return (b.portfolioValue || 0) - (a.portfolioValue || 0);
+        case 'holdings':
+            return b.tokens.length - a.tokens.length;
+        case 'score':
+        default:
+            if ((b.score || 0) !== (a.score || 0)) return (b.score || 0) - (a.score || 0);
+            return b.tokens.length - a.tokens.length;
+    }
+  });
+
+  // Prepare chart data (Always show top 10 by score for the chart, regardless of list sort)
+  const chartData = [...results.overlaps]
+    .sort((a, b) => (b.score || 0) - (a.score || 0))
+    .slice(0, 10)
+    .map((overlap, index) => ({
+      name: `W${index + 1}`, // We could use a short address here if W1 is confusing, but W1 matches the rank
+      shortAddr: overlap.address.slice(0, 4),
+      score: overlap.score || 0,
+      tokens: overlap.tokens.length
+    })); 
 
   const getScoreColor = (score?: number) => {
     if (!score) return 'text-skin-muted';
@@ -98,16 +116,31 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, the
       {/* Score Chart */}
       {results.overlaps.length > 0 && (
           <div className="bg-skin-card p-6 rounded-xl border-2 border-skin-border shadow-[4px_4px_0px_0px_var(--color-shadow)] h-80">
-            <h3 className="text-lg font-black text-skin-text mb-6">Wallet Threat Scores</h3>
+            <h3 className="text-lg font-black text-skin-text mb-6">Wallet Threat Scores (Top 10)</h3>
             <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData}>
-                    <XAxis dataKey="name" stroke={chartStyles.axis} fontSize={12} tick={{fill: chartStyles.axis, fontWeight: 'bold'}} tickLine={false} axisLine={{strokeWidth: 2}} />
+                <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                    <XAxis 
+                        dataKey="name" 
+                        stroke={chartStyles.axis} 
+                        fontSize={12} 
+                        tick={{fill: chartStyles.axis, fontWeight: 'bold'}} 
+                        tickLine={false} 
+                        axisLine={{strokeWidth: 2}}
+                        interval={0} // Show all labels
+                    />
                     <YAxis stroke={chartStyles.axis} fontSize={12} domain={[0, 10]} tick={{fill: chartStyles.axis, fontWeight: 'bold'}} tickLine={false} axisLine={{strokeWidth: 2}} />
                     <Tooltip 
                         contentStyle={{ backgroundColor: chartStyles.tooltipBg, border: `2px solid ${chartStyles.tooltipBorder}`, borderRadius: '8px', color: chartStyles.tooltipText, boxShadow: `4px 4px 0px 0px ${chartStyles.tooltipBorder}` }}
                         cursor={{fill: 'rgba(0, 0, 0, 0.05)'}}
+                        formatter={(value: number) => [`${value}/10`, 'Score']}
+                        labelFormatter={(label, payload) => {
+                            if (payload && payload.length > 0) {
+                                return `Wallet: ${payload[0].payload.shortAddr}...`;
+                            }
+                            return label;
+                        }}
                     />
-                    <Bar dataKey="score" radius={[4, 4, 0, 0]}>
+                    <Bar dataKey="score" radius={[4, 4, 0, 0]} maxBarSize={50}>
                         {chartData.map((entry, index) => (
                             <Cell key={`cell-${index}`} stroke={chartStyles.axis} strokeWidth={2} fill={entry.score > 7 ? '#ef4444' : entry.score > 4 ? '#f59e0b' : '#84cc16'} />
                         ))}
@@ -119,9 +152,32 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, the
 
       {/* Detailed List */}
       <div className="bg-skin-card rounded-xl border-2 border-skin-border overflow-hidden shadow-[4px_4px_0px_0px_var(--color-shadow)]">
-        <div className="p-6 border-b-2 border-skin-border flex justify-between items-center bg-skin-base">
+        <div className="p-6 border-b-2 border-skin-border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-skin-base">
             <h3 className="text-lg font-black text-skin-text">Smart Wallet Intelligence</h3>
-            <span className="text-xs bg-skin-card text-skin-text px-3 py-1.5 rounded border-2 border-skin-border font-bold shadow-[2px_2px_0px_0px_var(--color-shadow)]">Sorted by Score</span>
+            
+            <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-skin-muted uppercase">Sort By:</span>
+                <div className="flex bg-skin-card rounded-lg border-2 border-skin-border p-1 shadow-[2px_2px_0px_0px_var(--color-shadow)]">
+                    <button 
+                        onClick={() => setSortBy('score')}
+                        className={`px-3 py-1 rounded text-xs font-bold transition-all ${sortBy === 'score' ? 'bg-skin-text text-skin-base' : 'text-skin-muted hover:text-skin-text'}`}
+                    >
+                        Score
+                    </button>
+                    <button 
+                        onClick={() => setSortBy('portfolio')}
+                        className={`px-3 py-1 rounded text-xs font-bold transition-all ${sortBy === 'portfolio' ? 'bg-skin-text text-skin-base' : 'text-skin-muted hover:text-skin-text'}`}
+                    >
+                        Portfolio
+                    </button>
+                    <button 
+                        onClick={() => setSortBy('holdings')}
+                        className={`px-3 py-1 rounded text-xs font-bold transition-all ${sortBy === 'holdings' ? 'bg-skin-text text-skin-base' : 'text-skin-muted hover:text-skin-text'}`}
+                    >
+                        Holdings
+                    </button>
+                </div>
+            </div>
         </div>
         <div className="overflow-x-auto">
             <table className="w-full text-left text-sm text-skin-muted">
@@ -129,13 +185,13 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, the
                     <tr>
                         <th className="px-6 py-4">Wallet / Tags</th>
                         <th className="px-6 py-4 text-center">Score</th>
-                        <th className="px-6 py-4">Portfolio</th>
+                        <th className="px-6 py-4">Portfolio / PnL</th>
                         <th className="px-6 py-4">Holdings</th>
                         <th className="px-6 py-4 text-right">Actions</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y-2 divide-skin-border/10">
-                    {results.overlaps.map((overlap) => (
+                    {sortedOverlaps.map((overlap) => (
                         <tr key={overlap.address} className="hover:bg-skin-base transition-colors font-medium">
                             {/* Wallet & Tags */}
                             <td className="px-6 py-4">
@@ -169,15 +225,38 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, the
                                 </div>
                             </td>
 
-                            {/* Portfolio Value */}
+                            {/* Portfolio Value & PnL */}
                             <td className="px-6 py-4">
-                                <div className="flex items-center gap-1.5">
-                                    <Wallet size={14} className="text-skin-muted" />
-                                    <span className="text-skin-text font-bold">
-                                        {overlap.portfolioValue 
-                                            ? `$${overlap.portfolioValue.toLocaleString(undefined, {maximumFractionDigits: 0})}` 
-                                            : 'N/A'}
-                                    </span>
+                                <div className="flex flex-col gap-1">
+                                    <div className="flex items-center gap-1.5">
+                                        <Wallet size={14} className="text-skin-muted" />
+                                        <span className="text-skin-text font-bold">
+                                            {overlap.portfolioValue 
+                                                ? `$${overlap.portfolioValue.toLocaleString(undefined, {maximumFractionDigits: 0})}` 
+                                                : 'N/A'}
+                                        </span>
+                                    </div>
+                                    {overlap.wallet_summary && (
+                                        <div className="flex flex-col gap-0.5 text-xs">
+                                            <div className="flex items-center gap-1">
+                                                <span className="text-skin-muted">PnL:</span>
+                                                <span className={`font-bold ${overlap.wallet_summary.total_realized_pnl && overlap.wallet_summary.total_realized_pnl > 0 ? 'text-green-600' : overlap.wallet_summary.total_realized_pnl && overlap.wallet_summary.total_realized_pnl < 0 ? 'text-red-600' : 'text-skin-text'}`}>
+                                                    {overlap.wallet_summary.total_realized_pnl 
+                                                        ? `$${overlap.wallet_summary.total_realized_pnl.toLocaleString(undefined, {maximumFractionDigits: 0})}`
+                                                        : '$0'}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <span className="text-skin-muted">Win Rate:</span>
+                                                <span className="font-bold text-skin-text">
+                                                    {overlap.wallet_summary.win_rate}%
+                                                </span>
+                                                <span className="text-skin-muted text-[10px]">
+                                                    ({overlap.wallet_summary.profitable_positions || 0}W / {overlap.wallet_summary.losing_positions || 0}L)
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </td>
 
