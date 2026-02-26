@@ -1,4 +1,4 @@
-import { AnalysisConfig, AnalysisResult, Holder, TokenInfo, WalletOverlap } from '../types';
+import { AnalysisConfig, AnalysisResult, Holder, TokenInfo, WalletOverlap, TopTraderMatch, WalletSummary } from '../types';
 
 const BASE_URL = "https://data.solanatracker.io";
 
@@ -147,13 +147,12 @@ export class SolanaTrackerService {
     }
   }
 
-  async getWalletBasic(wallet: string): Promise<{ total: number }> {
+  async getWalletBasic(wallet: string): Promise<any> {
     const url = `${BASE_URL}/wallet/${wallet}/basic`;
     try {
         const response = await this.fetchWithRetry(url, 2);
         if (!response.ok) return { total: 0 };
-        const data = await response.json();
-        return { total: data.total || 0 };
+        return await response.json();
     } catch (e) {
         return { total: 0 };
     }
@@ -171,22 +170,21 @@ export class SolanaTrackerService {
     }
   }
 
-  async getTopTraders(token: string): Promise<Set<string>> {
+  async getTopTraders(token: string): Promise<any[]> {
       const cacheKey = `top:${token}`;
       if (this.cache.has(cacheKey)) return this.cache.get(cacheKey);
 
       const url = `${BASE_URL}/top-traders/${token}`;
       try {
           const response = await this.fetchWithRetry(url, 2);
-          if (!response.ok) return new Set();
+          if (!response.ok) return [];
           const data = await response.json();
           const traders = Array.isArray(data) ? data : (data.traders || []);
-          const result = new Set<string>(traders.map((t: any) => t.wallet || t.owner || t.address));
           
-          this.cache.set(cacheKey, result);
-          return result;
+          this.cache.set(cacheKey, traders);
+          return traders;
       } catch (e) {
-          return new Set();
+          return [];
       }
   }
 
@@ -197,7 +195,9 @@ export class SolanaTrackerService {
     const processedTokens: TokenInfo[] = [];
     const walletMap: Record<string, { tokens: string[], percentages: Record<string, number> }> = {};
     const tokenMap: Record<string, TokenInfo> = {};
-    const topTradersMap: Record<string, Set<string>> = {};
+    
+    // Map wallet address -> List of TopTraderMatch
+    const walletTopTraderMap = new Map<string, TopTraderMatch[]>();
 
     console.log("Starting Smart Analysis (Strict Rate Limit Mode)...");
 
@@ -217,9 +217,30 @@ export class SolanaTrackerService {
         processedTokens.push(info);
         tokenMap[cleanToken] = info;
 
+        // C. Top Traders (New Feature)
+        try {
+            const traders = await this.getTopTraders(cleanToken);
+            for (const t of traders) {
+                const wallet = t.wallet || t.owner || t.address;
+                if (wallet) {
+                    if (!walletTopTraderMap.has(wallet)) {
+                        walletTopTraderMap.set(wallet, []);
+                    }
+                    walletTopTraderMap.get(wallet)?.push({
+                        token: cleanToken,
+                        pnl: t.pnl || 0,
+                        roi: t.roi || 0,
+                        trades: t.total_trades || t.trades || 0
+                    });
+                }
+            }
+        } catch (e) {
+            console.warn(`Failed to fetch top traders for ${cleanToken}`, e);
+        }
+
         if (holders.length === 0) continue;
 
-        // C. Process Overlaps
+        // D. Process Overlaps
         for (const holder of holders) {
           const rawWallet = holder.owner || holder.address || (holder as any).wallet;
           const wallet = rawWallet ? rawWallet.trim() : null;
@@ -261,22 +282,8 @@ export class SolanaTrackerService {
     // We only fetch extra details for wallets that actually overlap
     if (overlaps.length > 0) {
         
-        // A. Fetch Top Traders for relevant tokens (Sequential to be safe)
-        const tokensInOverlaps = new Set<string>();
-        // Only consider tokens from the top 50 overlaps to save requests
+        // Only consider top 50 overlaps to save requests
         const deepAnalysisLimit = Math.min(overlaps.length, 50);
-        
-        for (let i = 0; i < deepAnalysisLimit; i++) {
-            overlaps[i].tokens.forEach(t => tokensInOverlaps.add(t));
-        }
-        
-        for (const t of tokensInOverlaps) {
-            topTradersMap[t] = await this.getTopTraders(t);
-        }
-
-        // B. Analyze Each Overlapping Wallet
-        // CRITICAL: We use a standard for loop with await to ensure SEQUENTIAL execution.
-        // Promise.all would trigger parallel requests and hit the rate limit immediately.
         
         if (overlaps.length > deepAnalysisLimit) {
             console.warn(`Limiting deep analysis to top ${deepAnalysisLimit} overlaps out of ${overlaps.length}`);
@@ -290,7 +297,7 @@ export class SolanaTrackerService {
             // Base Score: Overlaps
             score += (overlap.tokens.length * 2);
 
-            let basicInfo = { total: 0 };
+            let basicInfo: any = { total: 0 };
             let trades: any[] = [];
 
             // Fetch details sequentially
@@ -302,29 +309,43 @@ export class SolanaTrackerService {
                 trades = await this.getWalletTrades(overlap.address);
             } catch (e) { console.warn(`Failed trades for ${overlap.address}`, e); }
 
-            overlap.portfolioValue = basicInfo.total;
+            overlap.portfolioValue = basicInfo.total || 0;
+
+            // NEW: Wallet Summary
+            let realizedPnl = 0;
+            let profitableTrades = 0;
+            let totalTrades = trades.length;
+            
+            for (const trade of trades) {
+                if (trade.pnl) realizedPnl += trade.pnl;
+                if (trade.pnl > 0) profitableTrades++;
+            }
+
+            overlap.wallet_summary = {
+                portfolio_value_usd: basicInfo.total || 0,
+                total_trades: totalTrades,
+                win_rate: totalTrades > 0 ? Math.round((profitableTrades / totalTrades) * 100) : 0,
+                realized_pnl: realizedPnl
+            };
+
+            // NEW: Top Trader Match
+            const topTraderMatches = walletTopTraderMap.get(overlap.address) || [];
+            if (topTraderMatches.length > 0) {
+                overlap.is_top_trader = true;
+                overlap.top_trader_matches = topTraderMatches;
+                score += 3; // Bonus for being a top trader
+                tags.push("Top Trader");
+            }
 
             // Behavioral Analysis
-            let isWhale = basicInfo.total > 20000;
-            if (basicInfo.total > 5000) score += 2; 
+            let isWhale = (basicInfo.total || 0) > 20000;
+            if ((basicInfo.total || 0) > 5000) score += 2; 
             if (isWhale) tags.push("Whale");
 
             let isEarlySniper = false;
             let isQuickFlipper = false;
             let isDiamondHand = false;
             let maxDuration = 0;
-            let isInTopTraders = false;
-
-            // Top Traders Bonus
-            for (const t of overlap.tokens) {
-                if (topTradersMap[t]?.has(overlap.address)) {
-                    isInTopTraders = true;
-                }
-            }
-            if (isInTopTraders) {
-                score += 2;
-                tags.push("Top Trader");
-            }
 
             // Trade Pattern Analysis
             for (const tokenHash of overlap.tokens) {
@@ -360,7 +381,7 @@ export class SolanaTrackerService {
             if (maxDuration > 60 * 60 * 1000) score += 2; // > 1 Hour
             if (isDiamondHand) tags.push("Diamond Hand");
             if (isQuickFlipper) tags.push("Quick Flipper");
-            if (tags.length === 0) tags.push("Casual Trader");
+            if (tags.length === 0 && !tags.includes("Top Trader")) tags.push("Casual Trader");
 
             overlap.score = Math.min(score, 10);
             overlap.tags = [...new Set(tags)]; 
