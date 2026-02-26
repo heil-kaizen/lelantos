@@ -4,21 +4,25 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Lelantos</title>
-    <link rel="icon" type="image/webp" href="https://raw.githubusercontent.com/heil-kaizen/NOFace/main/lelantos.webp">
+    <link rel="icon" type="image/webp" href="https://raw.githubusercontent.com/heil-kaizen/lelantos/main/lelantos.webp">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
+        darkMode: 'class',
         theme: {
           extend: {
             fontFamily: {
               sans: ['Inter', 'sans-serif'],
             },
             colors: {
-              gray: {
-                750: '#2d3748',
-                850: '#1a202c',
-                950: '#0d1117',
+              skin: {
+                base: 'var(--color-base)',
+                card: 'var(--color-card)',
+                text: 'var(--color-text)',
+                muted: 'var(--color-muted)',
+                border: 'var(--color-border)',
+                shadow: 'var(--color-shadow)',
               }
             }
           }
@@ -26,26 +30,58 @@
       }
     </script>
     <style>
-      body {
-        background-color: #f8fafc;
-        color: #0f172a;
+      :root {
+        /* Light Theme (Default) */
+        --color-base: #f8fafc;
+        --color-card: #ffffff;
+        --color-text: #0f172a;
+        --color-muted: #64748b;
+        --color-border: #000000;
+        --color-shadow: #000000;
       }
-      /* Custom scrollbar for light theme */
+
+      [data-theme='dark'] {
+        /* Dark Theme */
+        --color-base: #0f172a;
+        --color-card: #1e293b;
+        --color-text: #f1f5f9;
+        --color-muted: #94a3b8;
+        --color-border: #ffffff;
+        --color-shadow: #000000;
+      }
+
+      [data-theme='night'] {
+        /* Night Theme (OLED / Matrix) */
+        --color-base: #000000;
+        --color-card: #111111;
+        --color-text: #e2e8f0;
+        --color-muted: #64748b;
+        --color-border: #22c55e;
+        --color-shadow: #22c55e;
+      }
+
+      body {
+        background-color: var(--color-base);
+        color: var(--color-text);
+        transition: background-color 0.3s, color 0.3s;
+      }
+      
+      /* Custom scrollbar */
       ::-webkit-scrollbar {
         width: 10px;
         height: 10px;
       }
       ::-webkit-scrollbar-track {
-        background: #f1f5f9; 
-        border-left: 2px solid #000;
+        background: var(--color-base); 
+        border-left: 2px solid var(--color-border);
       }
       ::-webkit-scrollbar-thumb {
-        background: #94a3b8; 
-        border: 2px solid #000;
+        background: var(--color-muted); 
+        border: 2px solid var(--color-border);
         border-radius: 0;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #64748b; 
+        background: var(--color-text); 
       }
     </style>
   <script type="importmap">
