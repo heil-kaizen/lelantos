@@ -21,6 +21,20 @@ export interface HoldersResponse {
   total: number;
 }
 
+export interface TopTraderMatch {
+  token: string;
+  pnl: number;
+  roi: number;
+  trades: number;
+}
+
+export interface WalletSummary {
+  portfolio_value_usd: number;
+  total_trades: number;
+  win_rate: number;
+  realized_pnl: number;
+}
+
 export interface WalletOverlap {
   address: string;
   tokens: string[];
@@ -31,6 +45,11 @@ export interface WalletOverlap {
   tags?: string[];
   portfolioValue?: number;
   avgHoldingDuration?: number; // in hours
+
+  // New Feature Fields
+  is_top_trader?: boolean;
+  top_trader_matches?: TopTraderMatch[];
+  wallet_summary?: WalletSummary;
 }
 
 export interface AnalysisResult {
