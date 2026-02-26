@@ -7,8 +7,8 @@ export class SolanaTrackerService {
   
   // Rate Limiting State
   private nextAllowedTime: number = 0;
-  // STRICT DELAY: 1.5 seconds between requests to stay safely under 1 req/s
-  private readonly MIN_REQUEST_INTERVAL = 1500; 
+  // STRICT DELAY: 2.0 seconds between requests to prevent rate limiting issues
+  private readonly MIN_REQUEST_INTERVAL = 2000; 
   
   // Cache to save credits on repeated lookups within the same session
   private cache: Map<string, any> = new Map();
@@ -170,6 +170,17 @@ export class SolanaTrackerService {
     }
   }
 
+  async getWalletPnL(wallet: string): Promise<any> {
+    const url = `${BASE_URL}/pnl/${wallet}`;
+    try {
+        const response = await this.fetchWithRetry(url, 2);
+        if (!response.ok) return null;
+        return await response.json();
+    } catch (e) {
+        return null;
+    }
+  }
+
   async getTopTraders(token: string): Promise<any[]> {
       const cacheKey = `top:${token}`;
       if (this.cache.has(cacheKey)) return this.cache.get(cacheKey);
@@ -299,6 +310,7 @@ export class SolanaTrackerService {
 
             let basicInfo: any = { total: 0 };
             let trades: any[] = [];
+            let pnlData: any = null;
 
             // Fetch details sequentially
             try {
@@ -308,6 +320,10 @@ export class SolanaTrackerService {
             try {
                 trades = await this.getWalletTrades(overlap.address);
             } catch (e) { console.warn(`Failed trades for ${overlap.address}`, e); }
+
+            try {
+                pnlData = await this.getWalletPnL(overlap.address);
+            } catch (e) { console.warn(`Failed PnL for ${overlap.address}`, e); }
 
             overlap.portfolioValue = basicInfo.total || 0;
 
@@ -321,11 +337,57 @@ export class SolanaTrackerService {
                 if (trade.pnl > 0) profitableTrades++;
             }
 
+            // Process PnL Data
+            let totalRealizedPnl = 0;
+            let totalUnrealizedPnl = 0;
+            let profitablePositions = 0;
+            let losingPositions = 0;
+            let usedPnLEndpoint = false;
+
+            if (pnlData) {
+                totalRealizedPnl = pnlData.totalRealizedPnl || 0;
+                totalUnrealizedPnl = pnlData.totalUnrealizedPnl || 0;
+                
+                if (pnlData.positions && Array.isArray(pnlData.positions)) {
+                    for (const pos of pnlData.positions) {
+                        const totalPosPnl = (pos.realizedPnl || 0) + (pos.unrealizedPnl || 0);
+                        if (totalPosPnl > 0) profitablePositions++;
+                        else if (totalPosPnl < 0) losingPositions++;
+                    }
+                }
+                usedPnLEndpoint = true;
+            }
+
+            // Fallback: If PnL endpoint failed (or returned 0/empty) but we have trades, use trade data
+            if (!usedPnLEndpoint && trades.length > 0) {
+                 totalRealizedPnl = realizedPnl;
+                 // Estimate positions from trades (rough approximation)
+                 profitablePositions = profitableTrades;
+                 losingPositions = totalTrades - profitableTrades;
+            }
+
+            // Calculate Win Rate based on available data source
+            let winRate = 0;
+            if (usedPnLEndpoint) {
+                const totalPositions = profitablePositions + losingPositions;
+                if (totalPositions > 0) {
+                    winRate = Math.round((profitablePositions / totalPositions) * 100);
+                }
+            } else {
+                if (totalTrades > 0) {
+                    winRate = Math.round((profitableTrades / totalTrades) * 100);
+                }
+            }
+
             overlap.wallet_summary = {
                 portfolio_value_usd: basicInfo.total || 0,
                 total_trades: totalTrades,
-                win_rate: totalTrades > 0 ? Math.round((profitableTrades / totalTrades) * 100) : 0,
-                realized_pnl: realizedPnl
+                win_rate: winRate,
+                realized_pnl: realizedPnl,
+                total_realized_pnl: totalRealizedPnl,
+                total_unrealized_pnl: totalUnrealizedPnl,
+                profitable_positions: profitablePositions,
+                losing_positions: losingPositions
             };
 
             // NEW: Top Trader Match
