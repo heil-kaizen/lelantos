@@ -144,7 +144,13 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, the
                     />
                     <Bar dataKey="score" radius={[4, 4, 0, 0]} maxBarSize={50}>
                         {chartData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} stroke={chartStyles.axis} strokeWidth={2} fill={entry.score > 7 ? '#ef4444' : entry.score > 4 ? '#f59e0b' : '#84cc16'} />
+                            <Cell 
+                                key={`cell-${index}`} 
+                                stroke={chartStyles.axis} 
+                                strokeWidth={2} 
+                                fill={entry.score > 7 ? '#ef4444' : entry.score > 4 ? '#f59e0b' : '#84cc16'} 
+                                style={{ outline: 'none' }}
+                            />
                         ))}
                     </Bar>
                 </BarChart>
