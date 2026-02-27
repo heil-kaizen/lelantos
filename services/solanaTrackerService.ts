@@ -6,16 +6,13 @@ export class SolanaTrackerService {
   private apiKey: string;
   
   // Rate Limiting State
-  private nextAllowedTime: number = 0;
-  // STRICT DELAY: 2.0 seconds between requests to prevent rate limiting issues
-  private readonly MIN_REQUEST_INTERVAL = 2000; 
-  
+  private requestQueue = Promise.resolve();
+
   // Cache to save credits on repeated lookups within the same session
   private cache: Map<string, any> = new Map();
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
-    this.nextAllowedTime = Date.now();
   }
 
   private getHeaders() {
@@ -28,54 +25,39 @@ export class SolanaTrackerService {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  /**
-   * STRICT Rate Limiter using Slot Reservation.
-   * Ensures requests are perfectly spaced out, regardless of when they were initiated.
-   */
-  private async enforceRateLimit() {
-    const now = Date.now();
-    let waitTime = 0;
-
-    // If we are ahead of schedule (current time < next allowed slot), we must wait.
-    if (now < this.nextAllowedTime) {
-      waitTime = this.nextAllowedTime - now;
-    }
-
-    // Reserve the next slot immediately. 
-    // The next request cannot execute until THIS request + INTERVAL has passed.
-    this.nextAllowedTime = Math.max(now, this.nextAllowedTime) + this.MIN_REQUEST_INTERVAL;
-
-    if (waitTime > 0) {
-      await this.sleep(waitTime);
-    }
+  private async enqueueRequest<T>(requestFn: () => Promise<T>): Promise<T> {
+    // Chain the request to the queue
+    const result = this.requestQueue.then(requestFn);
+    // Update the queue to wait for this request to finish (including its delay)
+    this.requestQueue = result.catch(() => {});
+    return result;
   }
 
-  private async fetchWithRetry(url: string, retries = 3): Promise<Response> {
-    for (let i = 0; i < retries; i++) {
-      try {
-        await this.enforceRateLimit();
+  private async executeFetch(url: string, retries: number): Promise<any> {
+      console.log(`Fetching: ${url}`);
+      const response = await fetch(url, { headers: this.getHeaders() });
 
-        console.log(`Fetching: ${url}`);
-        const response = await fetch(url, { headers: this.getHeaders() });
-        
-        // Handle Rate Limiting (429)
-        if (response.status === 429) {
-          const waitTime = 5000 * (i + 1); // Aggressive backoff
-          console.warn(`Rate limit 429 hit. Pausing for ${waitTime}ms...`);
-          // Push back the next allowed time to accommodate this pause
-          this.nextAllowedTime = Date.now() + waitTime;
-          await this.sleep(waitTime);
-          continue;
+      if (response.status === 429) {
+        if (retries > 0) {
+            console.warn(`Rate limit 429 hit. Pausing for 3000ms...`);
+            await this.sleep(3000);
+            return this.executeFetch(url, retries - 1);
+        } else {
+             throw new Error(`Rate limit exceeded after retries for ${url}`);
         }
-        
-        return response;
-      } catch (e) {
-        console.error(`Network error fetching ${url}:`, e);
-        if (i === retries - 1) throw e;
-        await this.sleep(2000); 
       }
-    }
-    throw new Error(`Failed to fetch ${url} after ${retries} attempts`);
+      
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      await this.sleep(2000); // Strict 2000ms delay
+      return data;
+  }
+
+  private async safeFetch(url: string): Promise<any> {
+      return this.enqueueRequest(() => this.executeFetch(url, 2));
   }
 
   // --- API ENDPOINTS ---
@@ -89,10 +71,7 @@ export class SolanaTrackerService {
 
     const url = `${BASE_URL}/tokens/${tokenAddress}`;
     try {
-      const response = await this.fetchWithRetry(url);
-      if (!response.ok) throw new Error("Failed to fetch token info");
-      
-      const data = await response.json();
+      const data = await this.safeFetch(url);
       const tokenData = data.token || data;
 
       const result: TokenInfo = {
@@ -119,10 +98,8 @@ export class SolanaTrackerService {
     // but for this session scope it might be okay. Let's keep it fresh for now.
     const url = `${BASE_URL}/tokens/${tokenAddress}/holders`;
     try {
-      const response = await this.fetchWithRetry(url);
-      if (!response.ok) return [];
+      const data = await this.safeFetch(url);
       
-      const data: any = await response.json();
       let holders: Holder[] = [];
       
       // Handle various API response formats
@@ -134,8 +111,7 @@ export class SolanaTrackerService {
       if (holders.length === 0) {
         console.warn("Received 0 holders. Retrying once after delay...");
         await this.sleep(2000);
-        const retryRes = await this.fetchWithRetry(url, 2);
-        const retryData: any = await retryRes.json();
+        const retryData = await this.safeFetch(url);
         if (retryData.accounts) holders = retryData.accounts;
         else if (retryData.holders) holders = retryData.holders;
       }
@@ -150,9 +126,8 @@ export class SolanaTrackerService {
   async getWalletBasic(wallet: string): Promise<any> {
     const url = `${BASE_URL}/wallet/${wallet}/basic`;
     try {
-        const response = await this.fetchWithRetry(url, 2);
-        if (!response.ok) return { total: 0 };
-        return await response.json();
+        const data = await this.safeFetch(url);
+        return data;
     } catch (e) {
         return { total: 0 };
     }
@@ -161,9 +136,7 @@ export class SolanaTrackerService {
   async getWalletTrades(wallet: string): Promise<any[]> {
     const url = `${BASE_URL}/wallet/${wallet}/trades`;
     try {
-        const response = await this.fetchWithRetry(url, 2);
-        if (!response.ok) return [];
-        const data = await response.json();
+        const data = await this.safeFetch(url);
         return Array.isArray(data) ? data : (data.trades || []);
     } catch (e) {
         return [];
@@ -173,9 +146,8 @@ export class SolanaTrackerService {
   async getWalletPnL(wallet: string): Promise<any> {
     const url = `${BASE_URL}/pnl/${wallet}`;
     try {
-        const response = await this.fetchWithRetry(url, 2);
-        if (!response.ok) return null;
-        return await response.json();
+        const data = await this.safeFetch(url);
+        return data;
     } catch (e) {
         return null;
     }
@@ -187,14 +159,23 @@ export class SolanaTrackerService {
 
       const url = `${BASE_URL}/top-traders/${token}`;
       try {
-          const response = await this.fetchWithRetry(url, 2);
-          if (!response.ok) return [];
-          const data = await response.json();
+          const data = await this.safeFetch(url);
           const traders = Array.isArray(data) ? data : (data.traders || []);
           
           this.cache.set(cacheKey, traders);
           return traders;
       } catch (e) {
+          return [];
+      }
+  }
+
+  async getFirstBuyers(token: string): Promise<FirstBuyer[]> {
+      const url = `${BASE_URL}/first-buyers/${token}`;
+      try {
+          const data = await this.safeFetch(url);
+          return Array.isArray(data) ? data : [];
+      } catch (e) {
+          console.warn(`Failed to fetch first buyers for ${token}`, e);
           return [];
       }
   }
