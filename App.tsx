@@ -108,13 +108,13 @@ const App: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
           {/* Left Sidebar: Controls */}
-          <div className="lg:col-span-3 space-y-8">
+          <div className={`${status === AppStatus.COMPLETED ? 'lg:col-span-3' : 'lg:col-span-4'} space-y-8 transition-all duration-300`}>
             <ApiKeyInput apiKey={apiKey} setApiKey={setApiKey} />
             <AnalysisForm status={status} onAnalyze={handleAnalyze} />
           </div>
 
           {/* Right Content: Results */}
-          <div className="lg:col-span-9">
+          <div className={`${status === AppStatus.COMPLETED ? 'lg:col-span-9' : 'lg:col-span-8'} transition-all duration-300`}>
             {status === AppStatus.IDLE && (
                <div className="h-full flex flex-col items-center justify-center text-skin-muted py-20 border-2 border-dashed border-skin-muted/30 rounded-xl bg-skin-card/50">
                   <div className="bg-skin-base p-6 rounded-full border-2 border-skin-border mb-6">
