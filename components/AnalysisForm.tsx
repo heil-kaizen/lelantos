@@ -38,18 +38,18 @@ export const AnalysisForm: React.FC<AnalysisFormProps> = ({ status, onAnalyze })
   const isValid = tokens.filter(t => t.trim() !== '').length >= 2;
 
   return (
-    <div className="bg-white p-6 rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] h-fit">
+    <div className="bg-skin-card p-6 rounded-xl border-2 border-skin-border shadow-[4px_4px_0px_0px_var(--color-shadow)] h-fit">
       <div className="flex items-center gap-2 mb-6">
-        <div className="bg-green-300 p-2 rounded border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+        <div className="bg-green-300 p-2 rounded border-2 border-skin-border shadow-[2px_2px_0px_0px_var(--color-shadow)]">
           <Search className="w-5 h-5 text-black" />
         </div>
-        <h2 className="text-xl font-black text-black">Start Analysis</h2>
+        <h2 className="text-xl font-black text-skin-text">Start Analysis</h2>
       </div>
 
       <form onSubmit={handleSubmit}>
         <div className="mb-6">
           <div className="flex justify-between items-center mb-2">
-            <label className="block text-sm font-bold text-slate-700">
+            <label className="block text-sm font-bold text-skin-text">
               Token Addresses (Min 2)
             </label>
             <button
@@ -64,21 +64,21 @@ export const AnalysisForm: React.FC<AnalysisFormProps> = ({ status, onAnalyze })
           
           <div className="space-y-3">
             {tokens.map((token, index) => (
-              <div key={index} className="flex gap-2">
+              <div key={index} className="flex items-center gap-2">
                 <input
                   type="text"
                   value={token}
                   onChange={(e) => handleTokenChange(index, e.target.value)}
                   placeholder={`Token Address ${index + 1}`}
-                  className="flex-grow bg-white border-2 border-black rounded-lg p-2.5 text-sm text-black font-medium focus:outline-none focus:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all placeholder-slate-400"
+                  className="flex-grow bg-skin-base border-2 border-skin-border rounded-lg h-11 px-3 text-sm text-skin-text font-medium focus:outline-none focus:shadow-[4px_4px_0px_0px_var(--color-shadow)] transition-all placeholder-skin-muted"
                 />
                 {tokens.length > 2 && (
                   <button
                     type="button"
                     onClick={() => handleRemoveToken(index)}
-                    className="p-2.5 text-black hover:bg-red-100 bg-white rounded-lg border-2 border-black transition-colors shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+                    className="h-11 w-11 flex items-center justify-center text-skin-text hover:bg-red-100 bg-skin-card rounded-lg border-2 border-skin-border transition-colors shadow-[2px_2px_0px_0px_var(--color-shadow)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
                   >
-                    <Trash2 size={16} />
+                    <Trash2 size={18} />
                   </button>
                 )}
               </div>
@@ -89,10 +89,10 @@ export const AnalysisForm: React.FC<AnalysisFormProps> = ({ status, onAnalyze })
         <button
           type="submit"
           disabled={!isValid || status === AppStatus.ANALYZING}
-          className={`w-full py-3 rounded-lg font-black text-lg transition-all border-2 border-black ${
+          className={`w-full py-3 rounded-lg font-black text-lg transition-all border-2 border-skin-border ${
             !isValid || status === AppStatus.ANALYZING
-              ? "bg-slate-200 text-slate-400 cursor-not-allowed"
-              : "bg-[#a3e635] text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:shadow-none"
+              ? "bg-skin-muted/20 text-skin-muted cursor-not-allowed"
+              : "bg-[#a3e635] text-black shadow-[4px_4px_0px_0px_var(--color-shadow)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_var(--color-shadow)] active:shadow-none"
           }`}
         >
           {status === AppStatus.ANALYZING ? "Scanning Chain..." : "Analyze Overlaps"}
