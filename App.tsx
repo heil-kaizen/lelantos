@@ -111,23 +111,6 @@ const App: React.FC = () => {
           <div className="lg:col-span-4 space-y-8">
             <ApiKeyInput apiKey={apiKey} setApiKey={setApiKey} />
             <AnalysisForm status={status} onAnalyze={handleAnalyze} />
-            
-            {/* Info Box */}
-            <div className="bg-blue-50/10 p-6 rounded-xl border-2 border-skin-border shadow-[4px_4px_0px_0px_var(--color-shadow)] text-sm text-skin-text leading-relaxed">
-              <h4 className="font-black text-lg text-skin-text mb-3 flex items-center gap-2">
-                <span className="bg-blue-400 text-white w-6 h-6 rounded flex items-center justify-center border border-skin-border text-xs">?</span>
-                How this works
-              </h4>
-              <p className="mb-2 font-medium opacity-80">
-                1. We fetch the Top 100 holders for each token you provide via SolanaTracker.
-              </p>
-              <p className="mb-2 font-medium opacity-80">
-                2. We identify any wallet that appears in the Top 100 list for multiple tokens.
-              </p>
-              <p className="font-medium opacity-80">
-                3. We cross-reference these wallets to find coordinated activity or heavy overlapping exposure.
-              </p>
-            </div>
           </div>
 
           {/* Right Content: Results */}
