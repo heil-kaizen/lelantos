@@ -84,6 +84,17 @@ export interface FirstBuyer {
   cost_basis: number;
 }
 
+export interface RecurringWallet {
+  address: string;
+  type: 'early_buyer' | 'top_trader';
+  occurrences: number;
+  tokens: string[];
+  total_pnl: number;
+  avg_roi: number;
+  win_rate: number;
+  data_points: any[]; // Store the raw data from each token for detailed view if needed
+}
+
 export interface AnalysisResult {
   overlaps: WalletOverlap[];
   processedTokens: TokenInfo[];
