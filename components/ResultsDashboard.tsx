@@ -2,13 +2,15 @@ import React, { useState } from 'react';
 import { AnalysisResult } from '../types';
 import { ExternalLink, Copy, CheckCircle, AlertTriangle, Users, Wallet } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { EarlyBuyersAnalysis } from './EarlyBuyersAnalysis';
 
 interface ResultsDashboardProps {
   results: AnalysisResult;
   theme?: 'light' | 'dark' | 'night';
+  apiKey: string;
 }
 
-export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, theme = 'light' }) => {
+export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, theme = 'light', apiKey }) => {
   const [copied, setCopied] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'score' | 'portfolio' | 'holdings'>('score');
 
@@ -317,6 +319,9 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, the
             </table>
         </div>
       </div>
+
+      {/* Early Buyers & Top Traders Analysis */}
+      <EarlyBuyersAnalysis tokens={results.processedTokens} apiKey={apiKey} />
     </div>
   );
 };
