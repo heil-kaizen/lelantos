@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { TokenInfo, FirstBuyer } from '../types';
+import { TokenInfo, FirstBuyer, RecurringWallet } from '../types';
 import { SolanaTrackerService } from '../services/solanaTrackerService';
-import { Wallet, TrendingUp, DollarSign, Clock, AlertCircle, ArrowUp, ArrowDown, Search, X, Trophy } from 'lucide-react';
+import { Wallet, TrendingUp, DollarSign, Clock, AlertCircle, ArrowUp, ArrowDown, Search, X, Trophy, Copy, CheckCircle, Users } from 'lucide-react';
 
 interface EarlyBuyersAnalysisProps {
   tokens: TokenInfo[];
@@ -9,123 +9,162 @@ interface EarlyBuyersAnalysisProps {
 }
 
 export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ tokens, apiKey }) => {
-  const [selectedToken, setSelectedToken] = useState<string>(tokens[0]?.token || '');
-  const [buyers, setBuyers] = useState<FirstBuyer[]>([]);
+  const [activeTab, setActiveTab] = useState<'early_buyers' | 'top_traders'>('early_buyers');
+  const [recurringBuyers, setRecurringBuyers] = useState<RecurringWallet[]>([]);
+  const [recurringTraders, setRecurringTraders] = useState<RecurringWallet[]>([]);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
-  
-  // Wallet Analysis State
-  const [analyzingWallet, setAnalyzingWallet] = useState<string | null>(null);
-  const [walletPnl, setWalletPnl] = useState<any | null>(null);
-  const [loadingPnl, setLoadingPnl] = useState(false);
-
-  // Top Traders Sort State
-  const [topTraderSort, setTopTraderSort] = useState<'total' | 'roi' | 'realized'>('total');
+  const [copied, setCopied] = useState<string | null>(null);
 
   const tracker = useMemo(() => new SolanaTrackerService(apiKey), [apiKey]);
 
-  const fetchBuyers = async () => {
-    if (!selectedToken) return;
-    setLoading(true);
-    setError(null);
-    setBuyers([]);
-    
-    try {
-      const data = await tracker.getFirstBuyers(selectedToken);
-      if (data.length === 0) {
-          setError("No early buyers found or API limit reached.");
-      }
-      setBuyers(data);
-    } catch (err) {
-      setError("Failed to fetch early buyers.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const analyzeWallet = async (wallet: string) => {
-      setAnalyzingWallet(wallet);
-      setLoadingPnl(true);
-      setWalletPnl(null);
-      try {
-          const data = await tracker.getWalletPnL(wallet);
-          setWalletPnl(data);
-      } catch (e) {
-          console.error(e);
-      } finally {
-          setLoadingPnl(false);
-      }
-  };
-
-  const closeAnalysis = () => {
-      setAnalyzingWallet(null);
-      setWalletPnl(null);
-  };
-
-  const calculateROI = (buyer: FirstBuyer) => {
-      if (buyer.total_invested === 0) return 0;
-      return (buyer.total / buyer.total_invested) * 100;
-  };
-
-  const getClassification = (buyer: FirstBuyer) => {
-      const roi = calculateROI(buyer);
-      if (buyer.total > 0 && roi > 100) return { label: "Smart Early", color: "bg-purple-100 text-purple-800 border-purple-200" };
-      if (buyer.total > 0) return { label: "Profitable", color: "bg-green-100 text-green-800 border-green-200" };
-      if (buyer.holding > 0 && buyer.sell_transactions === 0) return { label: "Diamond Hand", color: "bg-blue-100 text-blue-800 border-blue-200" };
-      return { label: "Exited / Weak", color: "bg-gray-100 text-gray-800 border-gray-200" };
-  };
-
-  const formatDate = (ms: number) => {
-      return new Date(ms).toLocaleString();
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(text);
+    setTimeout(() => setCopied(null), 2000);
   };
 
   const formatUSD = (val: number) => {
-      return `$${val.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+      return `$${val.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   };
 
-  // Derived Top Traders
-  const topTraders = useMemo(() => {
-      if (!buyers.length) return [];
-      const sorted = [...buyers].sort((a, b) => {
-          if (topTraderSort === 'total') return b.total - a.total;
-          if (topTraderSort === 'roi') return calculateROI(b) - calculateROI(a);
-          if (topTraderSort === 'realized') return b.realized - a.realized;
-          return 0;
-      });
-      return sorted.slice(0, 10);
-  }, [buyers, topTraderSort]);
+  const scanRecurringWallets = async () => {
+    if (tokens.length < 2) {
+        setError("Please analyze at least 2 tokens to find recurring wallets.");
+        return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setRecurringBuyers([]);
+    setRecurringTraders([]);
+    
+    // Total requests = tokens.length * 2 (First Buyers + Top Traders)
+    const totalRequests = tokens.length * 2;
+    setProgress({ current: 0, total: totalRequests });
+
+    const buyerMap = new Map<string, any[]>();
+    const traderMap = new Map<string, any[]>();
+
+    try {
+        for (let i = 0; i < tokens.length; i++) {
+            const token = tokens[i];
+            
+            // 1. Fetch First Buyers
+            try {
+                const buyers = await tracker.getFirstBuyers(token.token);
+                for (const b of buyers) {
+                    if (!buyerMap.has(b.wallet)) buyerMap.set(b.wallet, []);
+                    buyerMap.get(b.wallet)?.push({ ...b, tokenSymbol: token.symbol });
+                }
+            } catch (e) {
+                console.warn(`Failed buyers for ${token.symbol}`, e);
+            }
+            setProgress(prev => ({ ...prev, current: prev.current + 1 }));
+
+            // 2. Fetch Top Traders
+            try {
+                const traders = await tracker.getTopTraders(token.token);
+                for (const t of traders) {
+                    const wallet = t.wallet || t.owner || t.address;
+                    if (wallet) {
+                        if (!traderMap.has(wallet)) traderMap.set(wallet, []);
+                        traderMap.get(wallet)?.push({ ...t, tokenSymbol: token.symbol });
+                    }
+                }
+            } catch (e) {
+                console.warn(`Failed traders for ${token.symbol}`, e);
+            }
+            setProgress(prev => ({ ...prev, current: prev.current + 1 }));
+        }
+
+        // Process Overlaps
+        const processMap = (map: Map<string, any[]>, type: 'early_buyer' | 'top_trader'): RecurringWallet[] => {
+            const results: RecurringWallet[] = [];
+            for (const [address, entries] of map.entries()) {
+                // Only keep if present in at least 2 tokens
+                const uniqueTokens = new Set(entries.map(e => e.tokenSymbol));
+                if (uniqueTokens.size >= 2) {
+                    let totalPnl = 0;
+                    let totalRoi = 0;
+                    let wins = 0;
+
+                    for (const e of entries) {
+                        // Normalize PnL/ROI fields based on API response structure
+                        const pnl = e.total || e.pnl || 0;
+                        const roi = e.roi || (e.total_invested ? (e.total / e.total_invested) * 100 : 0);
+                        
+                        totalPnl += pnl;
+                        totalRoi += roi;
+                        if (pnl > 0) wins++;
+                    }
+
+                    results.push({
+                        address,
+                        type,
+                        occurrences: uniqueTokens.size,
+                        tokens: Array.from(uniqueTokens),
+                        total_pnl: totalPnl,
+                        avg_roi: totalRoi / entries.length,
+                        win_rate: Math.round((wins / entries.length) * 100),
+                        data_points: entries
+                    });
+                }
+            }
+            return results.sort((a, b) => b.occurrences - a.occurrences || b.total_pnl - a.total_pnl);
+        };
+
+        setRecurringBuyers(processMap(buyerMap, 'early_buyer'));
+        setRecurringTraders(processMap(traderMap, 'top_trader'));
+
+    } catch (err) {
+        setError("Failed to complete scan. Please try again.");
+    } finally {
+        setLoading(false);
+    }
+  };
 
   return (
     <div className="mt-12 space-y-8 border-t-4 border-skin-border pt-8">
        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
            <div>
                <h2 className="text-2xl font-black text-skin-text flex items-center gap-2">
-                   <Search className="text-skin-muted" />
-                   Token Deep Dive
+                   <Users className="text-skin-muted" />
+                   Recurring Wallet Finder
                </h2>
-               <p className="text-skin-muted text-sm font-medium mt-1">Analyze first buyers and top traders for a specific token.</p>
+               <p className="text-skin-muted text-sm font-medium mt-1">
+                   Identify wallets that appear as Early Buyers or Top Traders across multiple tokens.
+               </p>
            </div>
            
-           <div className="flex items-center gap-2 bg-skin-card p-2 rounded-xl border-2 border-skin-border shadow-[4px_4px_0px_0px_var(--color-shadow)]">
-               <select 
-                   className="bg-skin-base border-2 border-skin-border rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-black"
-                   value={selectedToken}
-                   onChange={(e) => setSelectedToken(e.target.value)}
-               >
-                   {tokens.map(t => (
-                       <option key={t.token} value={t.token}>{t.symbol} ({t.name})</option>
-                   ))}
-               </select>
-               <button 
-                   onClick={fetchBuyers}
-                   disabled={loading}
-                   className="bg-black text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-gray-800 disabled:opacity-50 transition-all flex items-center gap-2"
-               >
-                   {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Search size={16} />}
-                   Analyze
-               </button>
+           <div className="flex items-center gap-2">
+               {!loading && (recurringBuyers.length === 0 && recurringTraders.length === 0) && (
+                   <button 
+                       onClick={scanRecurringWallets}
+                       className="bg-black text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-gray-800 transition-all flex items-center gap-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]"
+                   >
+                       <Search size={18} />
+                       Scan for Recurring Wallets
+                   </button>
+               )}
            </div>
        </div>
+
+       {loading && (
+           <div className="bg-skin-card p-8 rounded-xl border-2 border-skin-border text-center">
+               <div className="w-12 h-12 border-4 border-skin-border border-t-black rounded-full animate-spin mx-auto mb-4"></div>
+               <h3 className="text-lg font-black text-skin-text">Scanning Wallets...</h3>
+               <p className="text-skin-muted font-medium mb-4">Checking {tokens.length} tokens for recurring patterns.</p>
+               <div className="w-full max-w-md mx-auto bg-skin-base h-4 rounded-full border-2 border-skin-border overflow-hidden">
+                   <div 
+                       className="h-full bg-green-500 transition-all duration-500 ease-out"
+                       style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                   ></div>
+               </div>
+               <p className="text-xs font-bold mt-2 text-skin-muted">{progress.current} / {progress.total} requests completed</p>
+           </div>
+       )}
 
        {error && (
            <div className="bg-red-100 border-2 border-red-200 text-red-800 p-4 rounded-xl font-bold flex items-center gap-2">
@@ -134,194 +173,89 @@ export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ tokens
            </div>
        )}
 
-       {buyers.length > 0 && (
-           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-               
-               {/* Top Traders Section */}
-               <div className="bg-skin-card rounded-xl border-2 border-skin-border shadow-[4px_4px_0px_0px_var(--color-shadow)] overflow-hidden">
-                   <div className="p-4 border-b-2 border-skin-border bg-skin-base flex justify-between items-center">
-                       <h3 className="font-black text-lg flex items-center gap-2">
-                           <Trophy className="text-yellow-500" />
-                           Top 10 Traders
-                       </h3>
-                       <div className="flex bg-skin-card rounded-lg border-2 border-skin-border p-1">
-                           {(['total', 'roi', 'realized'] as const).map(sort => (
-                               <button
-                                   key={sort}
-                                   onClick={() => setTopTraderSort(sort)}
-                                   className={`px-2 py-1 text-xs font-bold rounded capitalize ${topTraderSort === sort ? 'bg-black text-white' : 'text-skin-muted hover:text-skin-text'}`}
-                               >
-                                   {sort}
-                               </button>
+       {!loading && (recurringBuyers.length > 0 || recurringTraders.length > 0) && (
+           <div className="bg-skin-card rounded-xl border-2 border-skin-border shadow-[4px_4px_0px_0px_var(--color-shadow)] overflow-hidden">
+               {/* Tabs */}
+               <div className="flex border-b-2 border-skin-border bg-skin-base">
+                   <button
+                       onClick={() => setActiveTab('early_buyers')}
+                       className={`flex-1 py-4 font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-colors ${activeTab === 'early_buyers' ? 'bg-skin-card text-skin-text border-r-2 border-skin-border' : 'text-skin-muted hover:bg-skin-card/50'}`}
+                   >
+                       <Clock size={16} className={activeTab === 'early_buyers' ? 'text-blue-500' : ''} />
+                       Recurring Early Buyers ({recurringBuyers.length})
+                   </button>
+                   <button
+                       onClick={() => setActiveTab('top_traders')}
+                       className={`flex-1 py-4 font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-colors ${activeTab === 'top_traders' ? 'bg-skin-card text-skin-text border-l-2 border-skin-border' : 'text-skin-muted hover:bg-skin-card/50'}`}
+                   >
+                       <Trophy size={16} className={activeTab === 'top_traders' ? 'text-yellow-500' : ''} />
+                       Recurring Top Traders ({recurringTraders.length})
+                   </button>
+               </div>
+
+               {/* Content */}
+               <div className="overflow-x-auto max-h-[600px]">
+                   <table className="w-full text-sm text-left">
+                       <thead className="bg-black text-white text-xs uppercase font-bold sticky top-0 z-10">
+                           <tr>
+                               <th className="px-6 py-4">Wallet</th>
+                               <th className="px-6 py-4 text-center">Occurrences</th>
+                               <th className="px-6 py-4">Tokens Found In</th>
+                               <th className="px-6 py-4 text-right">Total PnL</th>
+                               <th className="px-6 py-4 text-right">Avg ROI</th>
+                               <th className="px-6 py-4 text-right">Win Rate</th>
+                               <th className="px-6 py-4 text-right">Action</th>
+                           </tr>
+                       </thead>
+                       <tbody className="divide-y-2 divide-skin-border/10 bg-skin-card">
+                           {(activeTab === 'early_buyers' ? recurringBuyers : recurringTraders).map((wallet, i) => (
+                               <tr key={i} className="hover:bg-skin-base transition-colors">
+                                   <td className="px-6 py-4 font-mono font-bold text-xs text-skin-text">
+                                       {wallet.address.slice(0, 4)}...{wallet.address.slice(-4)}
+                                   </td>
+                                   <td className="px-6 py-4 text-center">
+                                       <span className="bg-skin-base border-2 border-skin-border px-2 py-1 rounded font-black text-xs">
+                                           {wallet.occurrences}
+                                       </span>
+                                   </td>
+                                   <td className="px-6 py-4">
+                                       <div className="flex flex-wrap gap-1">
+                                           {wallet.tokens.map(t => (
+                                               <span key={t} className="text-[10px] bg-skin-muted/10 text-skin-text px-1.5 py-0.5 rounded font-bold border border-skin-border/20">
+                                                   {t}
+                                               </span>
+                                           ))}
+                                       </div>
+                                   </td>
+                                   <td className={`px-6 py-4 text-right font-black ${wallet.total_pnl > 0 ? 'text-green-600' : wallet.total_pnl < 0 ? 'text-red-600' : 'text-skin-text'}`}>
+                                       {formatUSD(wallet.total_pnl)}
+                                   </td>
+                                   <td className="px-6 py-4 text-right font-bold text-skin-muted">
+                                       {wallet.avg_roi.toFixed(0)}%
+                                   </td>
+                                   <td className="px-6 py-4 text-right font-bold text-skin-text">
+                                       {wallet.win_rate}%
+                                   </td>
+                                   <td className="px-6 py-4 text-right">
+                                       <button 
+                                           onClick={() => copyToClipboard(wallet.address)}
+                                           className="p-2 text-skin-muted hover:text-skin-text hover:bg-skin-base rounded-lg border-2 border-transparent hover:border-skin-border transition-all"
+                                           title="Copy Address"
+                                       >
+                                           {copied === wallet.address ? <CheckCircle size={16} className="text-green-500" /> : <Copy size={16} />}
+                                       </button>
+                                   </td>
+                               </tr>
                            ))}
-                       </div>
-                   </div>
-                   <div className="overflow-x-auto">
-                       <table className="w-full text-sm text-left">
-                           <thead className="bg-skin-base text-xs uppercase font-bold text-skin-muted border-b-2 border-skin-border">
+                           {(activeTab === 'early_buyers' ? recurringBuyers : recurringTraders).length === 0 && (
                                <tr>
-                                   <th className="px-4 py-3">Wallet</th>
-                                   <th className="px-4 py-3 text-right">Total PnL</th>
-                                   <th className="px-4 py-3 text-right">ROI</th>
-                                   <th className="px-4 py-3 text-right">Realized</th>
+                                   <td colSpan={7} className="px-6 py-12 text-center text-skin-muted font-bold">
+                                       No recurring wallets found in this category across the analyzed tokens.
+                                   </td>
                                </tr>
-                           </thead>
-                           <tbody className="divide-y divide-skin-border/20">
-                               {topTraders.map((trader, i) => (
-                                   <tr key={i} className="hover:bg-skin-base/50">
-                                       <td className="px-4 py-3 font-mono font-bold text-xs">
-                                           {trader.wallet.slice(0, 4)}...{trader.wallet.slice(-4)}
-                                       </td>
-                                       <td className={`px-4 py-3 text-right font-bold ${trader.total > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                           {formatUSD(trader.total)}
-                                       </td>
-                                       <td className="px-4 py-3 text-right font-bold">
-                                           {calculateROI(trader).toFixed(0)}%
-                                       </td>
-                                       <td className="px-4 py-3 text-right text-skin-muted">
-                                           {formatUSD(trader.realized)}
-                                       </td>
-                                   </tr>
-                               ))}
-                           </tbody>
-                       </table>
-                   </div>
-               </div>
-
-               {/* Early Buyers List */}
-               <div className="bg-skin-card rounded-xl border-2 border-skin-border shadow-[4px_4px_0px_0px_var(--color-shadow)] overflow-hidden lg:col-span-2">
-                   <div className="p-4 border-b-2 border-skin-border bg-skin-base">
-                       <h3 className="font-black text-lg flex items-center gap-2">
-                           <Clock className="text-blue-500" />
-                           Early Buyers (First 100)
-                       </h3>
-                   </div>
-                   <div className="overflow-x-auto max-h-[600px]">
-                       <table className="w-full text-sm text-left">
-                           <thead className="bg-black text-white text-xs uppercase font-bold sticky top-0 z-10">
-                               <tr>
-                                   <th className="px-4 py-3">Wallet</th>
-                                   <th className="px-4 py-3">First Buy</th>
-                                   <th className="px-4 py-3 text-right">Invested</th>
-                                   <th className="px-4 py-3 text-right">PnL / ROI</th>
-                                   <th className="px-4 py-3 text-center">Tx (B/S)</th>
-                                   <th className="px-4 py-3 text-center">Class</th>
-                                   <th className="px-4 py-3 text-right">Action</th>
-                               </tr>
-                           </thead>
-                           <tbody className="divide-y-2 divide-skin-border/10 bg-skin-card">
-                               {buyers.map((buyer, i) => {
-                                   const roi = calculateROI(buyer);
-                                   const classification = getClassification(buyer);
-                                   return (
-                                       <tr key={i} className="hover:bg-skin-base transition-colors">
-                                           <td className="px-4 py-3 font-mono font-bold text-xs text-skin-text">
-                                               {buyer.wallet.slice(0, 4)}...{buyer.wallet.slice(-4)}
-                                           </td>
-                                           <td className="px-4 py-3 text-xs">
-                                               <div className="font-bold">{formatUSD(buyer.first_buy.volume_usd)}</div>
-                                               <div className="text-skin-muted text-[10px]">{formatDate(buyer.first_buy_time)}</div>
-                                           </td>
-                                           <td className="px-4 py-3 text-right font-medium text-skin-text">
-                                               {formatUSD(buyer.total_invested)}
-                                           </td>
-                                           <td className="px-4 py-3 text-right">
-                                               <div className={`font-black ${buyer.total > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                                   {formatUSD(buyer.total)}
-                                               </div>
-                                               <div className="text-xs font-bold text-skin-muted">{roi.toFixed(0)}%</div>
-                                           </td>
-                                           <td className="px-4 py-3 text-center font-mono text-xs">
-                                               <span className="text-green-600 font-bold">{buyer.buy_transactions}</span>
-                                               <span className="text-skin-muted mx-1">/</span>
-                                               <span className="text-red-600 font-bold">{buyer.sell_transactions}</span>
-                                           </td>
-                                           <td className="px-4 py-3 text-center">
-                                               <span className={`text-[10px] px-2 py-1 rounded border ${classification.color} font-bold whitespace-nowrap`}>
-                                                   {classification.label}
-                                               </span>
-                                           </td>
-                                           <td className="px-4 py-3 text-right">
-                                               <button 
-                                                   onClick={() => analyzeWallet(buyer.wallet)}
-                                                   className="text-xs bg-black text-white px-3 py-1.5 rounded font-bold hover:bg-gray-800 transition-colors shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)]"
-                                               >
-                                                   Analyze
-                                               </button>
-                                           </td>
-                                       </tr>
-                                   );
-                               })}
-                           </tbody>
-                       </table>
-                   </div>
-               </div>
-           </div>
-       )}
-
-       {/* Wallet Analysis Modal */}
-       {analyzingWallet && (
-           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-               <div className="bg-skin-card w-full max-w-md rounded-xl border-2 border-skin-border shadow-[8px_8px_0px_0px_var(--color-shadow)] overflow-hidden animate-in fade-in zoom-in duration-200">
-                   <div className="p-4 border-b-2 border-skin-border bg-skin-base flex justify-between items-center">
-                       <h3 className="font-black text-lg">Wallet Analysis</h3>
-                       <button onClick={closeAnalysis} className="p-1 hover:bg-skin-card rounded border-2 border-transparent hover:border-skin-border transition-all">
-                           <X size={20} />
-                       </button>
-                   </div>
-                   
-                   <div className="p-6">
-                       <div className="mb-6 text-center">
-                           <div className="text-xs font-bold text-skin-muted uppercase tracking-wider mb-1">Target Wallet</div>
-                           <div className="font-mono font-black text-xl bg-skin-base py-2 px-4 rounded border-2 border-skin-border inline-block">
-                               {analyzingWallet.slice(0, 6)}...{analyzingWallet.slice(-6)}
-                           </div>
-                       </div>
-
-                       {loadingPnl ? (
-                           <div className="flex flex-col items-center justify-center py-8 gap-4">
-                               <div className="w-10 h-10 border-4 border-skin-border border-t-black rounded-full animate-spin"></div>
-                               <p className="font-bold text-skin-muted animate-pulse">Scanning wallet history...</p>
-                           </div>
-                       ) : walletPnl ? (
-                           <div className="space-y-4">
-                               <div className="grid grid-cols-2 gap-4">
-                                   <div className="bg-skin-base p-4 rounded-lg border-2 border-skin-border">
-                                       <div className="text-xs font-bold text-skin-muted uppercase">Total PnL</div>
-                                       <div className={`text-2xl font-black ${walletPnl.totalRealizedPnl > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                           {formatUSD(walletPnl.totalRealizedPnl || 0)}
-                                       </div>
-                                   </div>
-                                   <div className="bg-skin-base p-4 rounded-lg border-2 border-skin-border">
-                                       <div className="text-xs font-bold text-skin-muted uppercase">Win Rate</div>
-                                       <div className="text-2xl font-black text-skin-text">
-                                           {walletPnl.winRate ? `${walletPnl.winRate}%` : 'N/A'}
-                                       </div>
-                                   </div>
-                               </div>
-                               
-                               {/* Best/Worst Token (Simplified logic as API might not return sorted list directly, but let's assume we can find it if positions exist) */}
-                               {walletPnl.positions && walletPnl.positions.length > 0 && (
-                                   <div className="space-y-2">
-                                       <div className="text-xs font-bold text-skin-muted uppercase">Top Performers</div>
-                                       {walletPnl.positions.sort((a: any, b: any) => (b.realizedPnl || 0) - (a.realizedPnl || 0)).slice(0, 3).map((pos: any, i: number) => (
-                                           <div key={i} className="flex justify-between items-center text-sm font-bold border-b border-skin-border/10 pb-1">
-                                               <span>{pos.token?.symbol || pos.token?.mint?.slice(0, 4) || 'UNK'}</span>
-                                               <span className={pos.realizedPnl > 0 ? 'text-green-600' : 'text-red-600'}>
-                                                   {formatUSD(pos.realizedPnl || 0)}
-                                               </span>
-                                           </div>
-                                       ))}
-                                   </div>
-                               )}
-                           </div>
-                       ) : (
-                           <div className="text-center py-8 text-skin-muted font-bold">
-                               <AlertCircle className="mx-auto mb-2" />
-                               Could not fetch PnL data.
-                           </div>
-                       )}
-                   </div>
+                           )}
+                       </tbody>
+                   </table>
                </div>
            </div>
        )}
