@@ -158,7 +158,7 @@ const App: React.FC = () => {
             )}
 
             {status === AppStatus.COMPLETED && results && (
-              <ResultsDashboard results={results} theme={theme} />
+              <ResultsDashboard results={results} theme={theme} apiKey={apiKey} />
             )}
 
             {status === AppStatus.ERROR && (
