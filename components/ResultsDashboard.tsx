@@ -14,6 +14,22 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, the
   const [copied, setCopied] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'score' | 'portfolio' | 'holdings'>('score');
 
+  // Inject styles to remove Recharts focus outline
+  React.useEffect(() => {
+    const style = document.createElement('style');
+    style.innerHTML = `
+      .recharts-wrapper:focus,
+      .recharts-surface:focus,
+      .recharts-layer:focus {
+        outline: none !important;
+      }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopied(text);
