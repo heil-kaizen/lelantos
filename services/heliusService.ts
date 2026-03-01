@@ -84,26 +84,35 @@ export class HeliusService {
     }
 
     // Step 2: Filter transfers
-    // Only include transfers where: direction === "out" AND symbol === "SOL"
-    const outgoingSolTransfers = allTransfers.filter((t: any) => 
-        t.direction === 'out' && 
-        t.symbol === 'SOL'
+    // Include transfers where: 
+    // 1. direction === "out" AND symbol === "SOL"
+    // 2. direction === "out" AND symbol !== "SOL" (Token transfers)
+    const outgoingTransfers = allTransfers.filter((t: any) => 
+        t.direction === 'out'
     );
 
     // Step 3: Build recipient map
-    const recipientMap = new Map<string, { total: number, count: number, lastTime: number }>();
+    const recipientMap = new Map<string, { totalSol: number, totalTokens: number, count: number, lastTime: number }>();
 
-    for (const t of outgoingSolTransfers) {
+    for (const t of outgoingTransfers) {
         // The counterparty is the recipient when direction is 'out'
         const recipient = t.counterparty; 
         if (!recipient) continue;
 
         const amount = t.amount || 0;
         const timestamp = t.timestamp || 0;
+        const isSol = t.symbol === 'SOL';
 
-        const current = recipientMap.get(recipient) || { total: 0, count: 0, lastTime: 0 };
+        const current = recipientMap.get(recipient) || { totalSol: 0, totalTokens: 0, count: 0, lastTime: 0 };
         
-        current.total += amount;
+        if (isSol) {
+            current.totalSol += amount;
+        } else {
+            // For tokens, we just sum the raw amount for now as different tokens have different values.
+            // But the requirement is "minimum 10 million tokens".
+            current.totalTokens += amount;
+        }
+
         current.count += 1;
         if (timestamp > current.lastTime) {
             current.lastTime = timestamp;
@@ -112,19 +121,27 @@ export class HeliusService {
         recipientMap.set(recipient, current);
     }
 
-    // Step 4: Filter wallets (Total >= 1 SOL)
+    // Step 4: Filter wallets (Total SOL >= 1 OR Total Tokens >= 10,000,000)
     const results: ConnectedWalletResult[] = [];
 
     for (const [address, data] of recipientMap.entries()) {
-        if (data.total >= 1) {
+        const meetsSolCriteria = data.totalSol >= 1;
+        const meetsTokenCriteria = data.totalTokens >= 10000000;
+
+        if (meetsSolCriteria || meetsTokenCriteria) {
             let classification = "Connected";
-            if (data.total >= 5) classification = "Major Capital Move";
+            
+            if (data.totalSol >= 5 || data.totalTokens >= 50000000) classification = "Major Capital Move";
             else if (data.count >= 3) classification = "Repeated Routing";
-            // "Likely Storage Wallet" logic is optional and requires deeper scan (no outgoing), skipping for now as per instructions "optional deeper scan"
+            
+            if (meetsTokenCriteria && !meetsSolCriteria) {
+                classification = "Token Storage";
+            }
 
             results.push({
                 wallet: address,
-                total_sol_received: data.total,
+                total_sol_received: data.totalSol,
+                total_tokens_received: data.totalTokens,
                 transfer_count: data.count,
                 last_transfer_time: data.lastTime,
                 classification
@@ -132,7 +149,12 @@ export class HeliusService {
         }
     }
 
-    // Step 5: Sort descending by totalSOLSent
-    return results.sort((a, b) => b.total_sol_received - a.total_sol_received);
+    // Step 5: Sort descending by totalSOLSent (primary) then totalTokens (secondary)
+    return results.sort((a, b) => {
+        if (b.total_sol_received !== a.total_sol_received) {
+            return b.total_sol_received - a.total_sol_received;
+        }
+        return b.total_tokens_received - a.total_tokens_received;
+    });
   }
 }
