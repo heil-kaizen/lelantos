@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AnalysisForm } from './components/AnalysisForm';
 import { ResultsDashboard } from './components/ResultsDashboard';
 import { ApiKeyInput } from './components/ApiKeyInput';
+import { ConnectedWalletsAnalysis } from './components/ConnectedWalletsAnalysis';
 import { SolanaTrackerService } from './services/solanaTrackerService';
 import { AppStatus, AnalysisResult } from './types';
 import { Activity, Sun, Moon, Monitor } from 'lucide-react';
@@ -13,6 +14,7 @@ const App: React.FC = () => {
   const [results, setResults] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState<string>(""); 
+  const [heliusApiKey, setHeliusApiKey] = useState<string>("");
   const [theme, setTheme] = useState<Theme>('light');
 
   useEffect(() => {
@@ -109,7 +111,12 @@ const App: React.FC = () => {
           
           {/* Left Sidebar: Controls */}
           <div className={`${status === AppStatus.COMPLETED ? 'lg:col-span-3' : 'lg:col-span-4'} space-y-8 transition-all duration-300`}>
-            <ApiKeyInput apiKey={apiKey} setApiKey={setApiKey} />
+            <ApiKeyInput 
+              apiKey={apiKey} 
+              setApiKey={setApiKey} 
+              heliusApiKey={heliusApiKey}
+              setHeliusApiKey={setHeliusApiKey}
+            />
             <AnalysisForm status={status} onAnalyze={handleAnalyze} />
           </div>
 
@@ -153,6 +160,12 @@ const App: React.FC = () => {
           </div>
 
         </div>
+
+        {/* Connected Wallets Analysis Section */}
+        <div className="mt-12">
+            <ConnectedWalletsAnalysis heliusApiKey={heliusApiKey} />
+        </div>
+
       </main>
     </div>
   );
