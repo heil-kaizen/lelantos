@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AnalysisResult } from '../types';
-import { ExternalLink, Copy, CheckCircle, AlertTriangle, Users, Wallet } from 'lucide-react';
+import { ExternalLink, Copy, CheckCircle, AlertTriangle, Users, Wallet, TrendingUp } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { EarlyBuyersAnalysis } from './EarlyBuyersAnalysis';
 
@@ -270,15 +270,6 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, the
                                                         : '$0'}
                                                 </span>
                                             </div>
-                                            <div className="flex items-center gap-1">
-                                                <span className="text-skin-muted">Win Rate:</span>
-                                                <span className="font-bold text-skin-text">
-                                                    {overlap.wallet_summary.win_rate}%
-                                                </span>
-                                                <span className="text-skin-muted text-[10px]">
-                                                    ({overlap.wallet_summary.profitable_positions || 0}W / {overlap.wallet_summary.losing_positions || 0}L)
-                                                </span>
-                                            </div>
                                         </div>
                                     )}
                                 </div>
@@ -322,6 +313,15 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, the
                                         title="View on Solscan"
                                     >
                                         <ExternalLink size={16} />
+                                    </a>
+                                    <a 
+                                        href={`https://gmgn.ai/sol/address/${overlap.address}`} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="p-2 text-skin-muted hover:text-purple-600 hover:bg-purple-50 rounded-lg border-2 border-transparent hover:border-skin-border transition-all"
+                                        title="View on GMGN"
+                                    >
+                                        <TrendingUp size={16} />
                                     </a>
                                 </div>
                             </td>
