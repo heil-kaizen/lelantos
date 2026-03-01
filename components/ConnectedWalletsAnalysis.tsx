@@ -120,13 +120,14 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
         )}
       </div>
 
-      {results && (
+        {results && (
         <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
                 <thead className="bg-black text-white uppercase font-bold tracking-wider">
                     <tr>
                         <th className="px-6 py-4">Connected Wallet</th>
-                        <th className="px-6 py-4 text-right">Total SOL Received</th>
+                        <th className="px-6 py-4 text-right">SOL Received</th>
+                        <th className="px-6 py-4 text-right">Tokens Received</th>
                         <th className="px-6 py-4 text-center">Transfers</th>
                         <th className="px-6 py-4">Last Transfer</th>
                         <th className="px-6 py-4">Classification</th>
@@ -141,6 +142,9 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
                             </td>
                             <td className="px-6 py-4 text-right font-black text-green-600">
                                 {item.total_sol_received.toFixed(2)} SOL
+                            </td>
+                            <td className="px-6 py-4 text-right font-bold text-indigo-600">
+                                {item.total_tokens_received > 0 ? (item.total_tokens_received / 1000000).toFixed(1) + 'M' : '-'}
                             </td>
                             <td className="px-6 py-4 text-center font-bold">
                                 {item.transfer_count}
@@ -177,8 +181,8 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
                     ))}
                     {results.length === 0 && (
                         <tr>
-                            <td colSpan={6} className="px-6 py-12 text-center text-skin-muted font-bold">
-                                No connected wallets found with ≥ 1 SOL received.
+                            <td colSpan={7} className="px-6 py-12 text-center text-skin-muted font-bold">
+                                No connected wallets found with ≥ 1 SOL or ≥ 10M Tokens received.
                             </td>
                         </tr>
                     )}
