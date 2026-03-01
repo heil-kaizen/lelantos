@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { TokenInfo, FirstBuyer, RecurringWallet } from '../types';
 import { SolanaTrackerService } from '../services/solanaTrackerService';
-import { Wallet, TrendingUp, DollarSign, Clock, AlertCircle, ArrowUp, ArrowDown, Search, X, Trophy, Copy, CheckCircle, Users } from 'lucide-react';
+import { Wallet, TrendingUp, DollarSign, Clock, AlertCircle, ArrowUp, ArrowDown, Search, X, Trophy, Copy, CheckCircle, Users, ExternalLink } from 'lucide-react';
 
 interface EarlyBuyersAnalysisProps {
   tokens: TokenInfo[];
@@ -203,7 +203,7 @@ export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ tokens
                                <th className="px-6 py-4">Tokens Found In</th>
                                <th className="px-6 py-4 text-right">Total PnL</th>
                                <th className="px-6 py-4 text-right">Avg ROI</th>
-                               <th className="px-6 py-4 text-right">Win Rate</th>
+                               <th className="px-6 py-4 text-right">GMGN</th>
                                <th className="px-6 py-4 text-right">Action</th>
                            </tr>
                        </thead>
@@ -233,8 +233,15 @@ export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ tokens
                                    <td className="px-6 py-4 text-right font-bold text-skin-muted">
                                        {wallet.avg_roi.toFixed(0)}%
                                    </td>
-                                   <td className="px-6 py-4 text-right font-bold text-skin-text">
-                                       {wallet.win_rate}%
+                                   <td className="px-6 py-4 text-right">
+                                       <a 
+                                           href={`https://gmgn.ai/sol/address/${wallet.address}`}
+                                           target="_blank"
+                                           rel="noopener noreferrer"
+                                           className="inline-flex items-center gap-1 text-blue-500 hover:text-blue-600 font-bold hover:underline"
+                                       >
+                                           View <ExternalLink size={14} />
+                                       </a>
                                    </td>
                                    <td className="px-6 py-4 text-right">
                                        <button 
