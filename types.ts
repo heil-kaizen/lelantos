@@ -95,6 +95,14 @@ export interface RecurringWallet {
   data_points: any[]; // Store the raw data from each token for detailed view if needed
 }
 
+export interface ConnectedWalletResult {
+  wallet: string;
+  total_sol_received: number;
+  transfer_count: number;
+  last_transfer_time: number;
+  classification?: string;
+}
+
 export interface AnalysisResult {
   overlaps: WalletOverlap[];
   processedTokens: TokenInfo[];
