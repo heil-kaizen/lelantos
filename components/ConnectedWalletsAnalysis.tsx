@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { HeliusService } from '../services/heliusService';
 import { ConnectedWalletResult } from '../types';
-import { Search, ArrowRight, Wallet, Clock, AlertCircle, ExternalLink, TrendingUp, ShieldCheck, Repeat } from 'lucide-react';
+import { Search, ArrowRight, Wallet, Clock, AlertCircle, ExternalLink, TrendingUp, ShieldCheck, Repeat, Copy, CheckCircle } from 'lucide-react';
 
 interface ConnectedWalletsAnalysisProps {
   heliusApiKey: string;
@@ -12,6 +12,7 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
   const [results, setResults] = useState<ConnectedWalletResult[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
 
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,6 +41,12 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
     }
   };
 
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(text);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
   const formatTime = (timestamp: number) => {
     return new Date(timestamp * 1000).toLocaleString();
   };
@@ -54,7 +61,7 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
   };
 
   return (
-    <div className="bg-skin-card rounded-xl border-2 border-skin-border shadow-[4px_4px_0px_0px_var(--color-shadow)] overflow-hidden mt-8">
+    <div className="bg-skin-card rounded-xl border-2 border-skin-border shadow-[4px_4px_0px_0px_var(--color-shadow)] overflow-hidden h-full">
       <div className="p-6 border-b-2 border-skin-border bg-skin-base">
         <div className="flex items-center gap-3 mb-4">
             <div className="bg-indigo-500 p-2 rounded border-2 border-skin-border shadow-[2px_2px_0px_0px_var(--color-shadow)]">
@@ -148,15 +155,13 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
                             </td>
                             <td className="px-6 py-4 text-right">
                                 <div className="flex justify-end gap-2">
-                                    <a 
-                                        href={`https://solscan.io/account/${item.wallet}`} 
-                                        target="_blank" 
-                                        rel="noopener noreferrer"
-                                        className="p-2 text-skin-muted hover:text-blue-600 hover:bg-blue-50 rounded-lg border-2 border-transparent hover:border-skin-border transition-all"
-                                        title="View on Solscan"
+                                    <button 
+                                        onClick={() => copyToClipboard(item.wallet)}
+                                        className="p-2 text-skin-muted hover:text-skin-text hover:bg-skin-base rounded-lg border-2 border-transparent hover:border-skin-border transition-all"
+                                        title="Copy Address"
                                     >
-                                        <ExternalLink size={16} />
-                                    </a>
+                                        {copied === item.wallet ? <CheckCircle size={16} className="text-green-500" /> : <Copy size={16} />}
+                                    </button>
                                     <a 
                                         href={`https://gmgn.ai/sol/address/${item.wallet}`} 
                                         target="_blank" 
