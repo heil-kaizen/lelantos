@@ -97,11 +97,17 @@ export interface RecurringWallet {
 
 export interface ConnectedWalletResult {
   wallet: string;
-  total_sol_received: number;
-  total_tokens_received: number;
-  transfer_count: number;
+  total_sol_sent: number;      // Main -> Wallet
+  total_sol_received: number;  // Wallet -> Main
+  transfer_count_sent: number;
+  transfer_count_received: number;
   last_transfer_time: number;
-  classification?: string;
+  classification: string;
+}
+
+export interface ConnectedWalletsResponse {
+    results: ConnectedWalletResult[];
+    scanned_count: number;
 }
 
 export interface AnalysisResult {
