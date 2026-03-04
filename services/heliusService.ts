@@ -63,7 +63,7 @@ export class HeliusService {
 
   async traceConnectedWallets(walletAddress: string): Promise<{ results: ConnectedWalletResult[], scanned_count: number }> {
     const limit = 100;
-    const maxTransfers = 2000; // Increased to 2000 as requested
+    const maxTransfers = 700; // Updated to 700 as requested
     let allTransfers: any[] = [];
     let nextCursor: string | undefined;
     let hasMore = true;
@@ -76,6 +76,7 @@ export class HeliusService {
       }
 
       try {
+        // The fetchWithRetry method already uses enqueueRequest which adds a DELAY_MS (1200ms) delay.
         const response = await this.fetchWithRetry(transferUrl);
         
         // Check if response has data array
