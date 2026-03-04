@@ -41,9 +41,29 @@ export class HeliusService {
     }
   }
 
+  async getWalletIdentity(walletAddress: string): Promise<{ domain?: string, social?: string }> {
+    try {
+        const url = `https://api.helius.xyz/v1/wallet/${walletAddress}/identity?api-key=${this.apiKey}`;
+        const response = await this.fetchWithRetry(url, 1);
+        
+        // Helius Identity Response Example: { "domain": "example.sol", "twitter": "@handle" }
+        // Note: The actual response structure might vary, but let's assume standard fields based on docs.
+        // If the API returns a different structure, we might need to adjust.
+        // Common fields: domain, twitter, discord, telegram.
+        
+        return {
+            domain: response.domain || undefined,
+            social: response.twitter || response.discord || response.telegram || undefined
+        };
+    } catch (e) {
+        // Identity fetch is non-critical, so we just return empty if it fails
+        return {};
+    }
+  }
+
   async traceConnectedWallets(walletAddress: string): Promise<{ results: ConnectedWalletResult[], scanned_count: number }> {
     const limit = 100;
-    const maxTransfers = 500;
+    const maxTransfers = 2000; // Increased to 2000 as requested
     let allTransfers: any[] = [];
     let nextCursor: string | undefined;
     let hasMore = true;
@@ -61,14 +81,18 @@ export class HeliusService {
         // Check if response has data array
         const data = response.data || [];
         
-        // Accumulate raw data
-        allTransfers = [...allTransfers, ...data];
-
-        // Check pagination
-        if (response.pagination && response.pagination.hasMore && response.pagination.nextCursor) {
-            nextCursor = response.pagination.nextCursor;
-        } else {
+        if (data.length === 0) {
             hasMore = false;
+        } else {
+            // Accumulate raw data
+            allTransfers = [...allTransfers, ...data];
+
+            // Check pagination
+            if (response.pagination && response.pagination.hasMore && response.pagination.nextCursor) {
+                nextCursor = response.pagination.nextCursor;
+            } else {
+                hasMore = false;
+            }
         }
       } catch (e) {
         console.error("Error fetching Helius transfers:", e);
@@ -92,6 +116,9 @@ export class HeliusService {
     for (const t of solTransfers) {
         const counterparty = t.counterparty;
         if (!counterparty) continue;
+        
+        // Ignore self-transfers
+        if (counterparty === walletAddress) continue;
 
         const amount = t.amount || 0;
         const timestamp = t.timestamp || 0;
@@ -154,8 +181,17 @@ export class HeliusService {
     // Step 5: Sort descending by total activity (sent + received)
     results.sort((a, b) => (b.total_sol_sent + b.total_sol_received) - (a.total_sol_sent + a.total_sol_received));
 
+    // Step 6: Enrich with Identity (Limit to top 10 to avoid rate limits)
+    const topResults = results.slice(0, 10);
+    const remainingResults = results.slice(10);
+    
+    const enrichedResults = await Promise.all(topResults.map(async (res) => {
+        const identity = await this.getWalletIdentity(res.wallet);
+        return { ...res, ...identity };
+    }));
+
     return {
-        results,
+        results: [...enrichedResults, ...remainingResults],
         scanned_count: allTransfers.length
     };
   }
