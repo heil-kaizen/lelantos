@@ -111,7 +111,7 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
 
         {loading && (
             <div className="mt-4 text-center p-4 bg-indigo-50 rounded-lg border-2 border-indigo-100 text-indigo-800 font-bold animate-pulse">
-                Scanning deep history (up to 500 txs)...
+                Scanning deep history (up to 2000 txs) & resolving identities...
             </div>
         )}
 
@@ -122,10 +122,10 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
             </div>
         )}
 
-        {!loading && scannedCount >= 500 && (
+        {!loading && scannedCount >= 2000 && (
             <div className="mt-4 bg-orange-100 border-2 border-orange-200 text-orange-800 p-4 rounded-xl font-bold flex items-center gap-2">
                 <AlertCircle size={20} />
-                High activity wallet — scanning limited to last 500 transfers.
+                High activity wallet — scanning limited to last 2000 transfers.
             </div>
         )}
       </div>
@@ -148,7 +148,19 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
                     {results.map((item, index) => (
                         <tr key={index} className="hover:bg-skin-base transition-colors font-medium">
                             <td className="px-6 py-4 font-mono font-bold text-skin-text">
-                                {item.wallet.slice(0, 4)}...{item.wallet.slice(-4)}
+                                <div>
+                                    {item.domain ? (
+                                        <span className="text-indigo-600 block">{item.domain}</span>
+                                    ) : (
+                                        <span>{item.wallet.slice(0, 4)}...{item.wallet.slice(-4)}</span>
+                                    )}
+                                    {item.social && (
+                                        <span className="text-xs text-skin-muted block">{item.social}</span>
+                                    )}
+                                    {item.domain && (
+                                        <span className="text-xs text-skin-muted block font-mono">{item.wallet.slice(0, 4)}...{item.wallet.slice(-4)}</span>
+                                    )}
+                                </div>
                             </td>
                             <td className="px-6 py-4 text-right font-black text-red-600">
                                 {item.total_sol_sent > 0 ? item.total_sol_sent.toFixed(2) : '-'}
@@ -193,6 +205,10 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
                         <tr>
                             <td colSpan={7} className="px-6 py-12 text-center text-skin-muted font-bold">
                                 No connected wallets found with ≥ 0.5 SOL activity.
+                                <br/>
+                                <span className="text-xs font-normal opacity-70">
+                                    (Scanned {scannedCount} transactions. If a transfer existed, it may be beyond this depth.)
+                                </span>
                             </td>
                         </tr>
                     )}
