@@ -111,7 +111,7 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
 
         {loading && (
             <div className="mt-4 text-center p-4 bg-indigo-50 rounded-lg border-2 border-indigo-100 text-indigo-800 font-bold animate-pulse">
-                Scanning deep history (up to 2000 txs) & resolving identities...
+                Scanning deep history (up to 700 txs) & resolving identities...
             </div>
         )}
 
@@ -122,10 +122,10 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
             </div>
         )}
 
-        {!loading && scannedCount >= 2000 && (
+        {!loading && scannedCount >= 700 && (
             <div className="mt-4 bg-orange-100 border-2 border-orange-200 text-orange-800 p-4 rounded-xl font-bold flex items-center gap-2">
                 <AlertCircle size={20} />
-                High activity wallet — scanning limited to last 2000 transfers.
+                High activity wallet — scanning limited to last 700 transfers.
             </div>
         )}
       </div>
