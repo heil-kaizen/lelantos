@@ -10,6 +10,7 @@ interface ConnectedWalletsAnalysisProps {
 export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> = ({ heliusApiKey }) => {
   const [walletAddress, setWalletAddress] = useState('');
   const [results, setResults] = useState<ConnectedWalletResult[] | null>(null);
+  const [scannedCount, setScannedCount] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -28,11 +29,13 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
     setLoading(true);
     setError(null);
     setResults(null);
+    setScannedCount(0);
 
     try {
       const service = new HeliusService(heliusApiKey);
       const data = await service.traceConnectedWallets(walletAddress);
-      setResults(data);
+      setResults(data.results);
+      setScannedCount(data.scanned_count);
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Failed to trace connected wallets.");
@@ -53,9 +56,9 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
 
   const getClassificationColor = (cls?: string) => {
       switch(cls) {
-          case 'Major Capital Move': return 'text-red-600 bg-red-100 border-red-200';
-          case 'Repeated Routing': return 'text-orange-600 bg-orange-100 border-orange-200';
-          case 'Likely Storage Wallet': return 'text-purple-600 bg-purple-100 border-purple-200';
+          case 'Strongly Linked Wallet': return 'text-purple-600 bg-purple-100 border-purple-200';
+          case 'Side Wallet': return 'text-red-600 bg-red-100 border-red-200';
+          case 'Funding Wallet': return 'text-green-600 bg-green-100 border-green-200';
           default: return 'text-blue-600 bg-blue-100 border-blue-200';
       }
   };
@@ -69,7 +72,7 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
             </div>
             <div>
                 <h2 className="text-2xl font-black text-skin-text">Connected / Side Wallets</h2>
-                <p className="text-skin-muted text-sm font-medium">Trace capital flows and identify side wallets (≥ 1 SOL).</p>
+                <p className="text-skin-muted text-sm font-medium">Trace capital flows and identify side wallets (≥ 0.5 SOL).</p>
             </div>
         </div>
 
@@ -108,7 +111,7 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
 
         {loading && (
             <div className="mt-4 text-center p-4 bg-indigo-50 rounded-lg border-2 border-indigo-100 text-indigo-800 font-bold animate-pulse">
-                Tracing capital flows & analyzing routing behavior...
+                Scanning deep history (up to 500 txs)...
             </div>
         )}
 
@@ -116,6 +119,13 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
             <div className="mt-4 bg-red-100 border-2 border-red-200 text-red-800 p-4 rounded-xl font-bold flex items-center gap-2">
                 <AlertCircle size={20} />
                 {error}
+            </div>
+        )}
+
+        {!loading && scannedCount >= 500 && (
+            <div className="mt-4 bg-orange-100 border-2 border-orange-200 text-orange-800 p-4 rounded-xl font-bold flex items-center gap-2">
+                <AlertCircle size={20} />
+                High activity wallet — scanning limited to last 500 transfers.
             </div>
         )}
       </div>
@@ -126,8 +136,8 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
                 <thead className="bg-black text-white uppercase font-bold tracking-wider">
                     <tr>
                         <th className="px-6 py-4">Connected Wallet</th>
-                        <th className="px-6 py-4 text-right">SOL Received</th>
-                        <th className="px-6 py-4 text-right">Tokens Received</th>
+                        <th className="px-6 py-4 text-right">Sent (SOL)</th>
+                        <th className="px-6 py-4 text-right">Received (SOL)</th>
                         <th className="px-6 py-4 text-center">Transfers</th>
                         <th className="px-6 py-4">Last Transfer</th>
                         <th className="px-6 py-4">Classification</th>
@@ -140,14 +150,14 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
                             <td className="px-6 py-4 font-mono font-bold text-skin-text">
                                 {item.wallet.slice(0, 4)}...{item.wallet.slice(-4)}
                             </td>
-                            <td className="px-6 py-4 text-right font-black text-green-600">
-                                {item.total_sol_received.toFixed(2)} SOL
+                            <td className="px-6 py-4 text-right font-black text-red-600">
+                                {item.total_sol_sent > 0 ? item.total_sol_sent.toFixed(2) : '-'}
                             </td>
-                            <td className="px-6 py-4 text-right font-bold text-indigo-600">
-                                {item.total_tokens_received > 0 ? (item.total_tokens_received / 1000000).toFixed(1) + 'M' : '-'}
+                            <td className="px-6 py-4 text-right font-black text-green-600">
+                                {item.total_sol_received > 0 ? item.total_sol_received.toFixed(2) : '-'}
                             </td>
                             <td className="px-6 py-4 text-center font-bold">
-                                {item.transfer_count}
+                                {item.transfer_count_sent + item.transfer_count_received}
                             </td>
                             <td className="px-6 py-4 text-skin-muted text-xs">
                                 {formatTime(item.last_transfer_time)}
@@ -182,7 +192,7 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
                     {results.length === 0 && (
                         <tr>
                             <td colSpan={7} className="px-6 py-12 text-center text-skin-muted font-bold">
-                                No connected wallets found with ≥ 1 SOL or ≥ 10M Tokens received.
+                                No connected wallets found with ≥ 0.5 SOL activity.
                             </td>
                         </tr>
                     )}
