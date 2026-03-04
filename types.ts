@@ -103,6 +103,8 @@ export interface ConnectedWalletResult {
   transfer_count_received: number;
   last_transfer_time: number;
   classification: string;
+  domain?: string;
+  social?: string;
 }
 
 export interface ConnectedWalletsResponse {
