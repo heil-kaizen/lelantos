@@ -41,21 +41,15 @@ export class HeliusService {
     }
   }
 
-  async traceConnectedWallets(walletAddress: string): Promise<ConnectedWalletResult[]> {
-    const limit = 50;
-    const maxTransfers = 150;
+  async traceConnectedWallets(walletAddress: string): Promise<{ results: ConnectedWalletResult[], scanned_count: number }> {
+    const limit = 100;
+    const maxTransfers = 500;
     let allTransfers: any[] = [];
     let nextCursor: string | undefined;
     let hasMore = true;
 
     // Step 1: Fetch transfers with pagination
     while (hasMore && allTransfers.length < maxTransfers) {
-      let url = `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions?api-key=${this.apiKey}&limit=${limit}`;
-      
-      // User requested: GET https://api.helius.xyz/v1/wallet/{wallet}/transfers?limit=50&api-key=YOUR_API_KEY
-      // But the example response structure is slightly different from standard Helius v0.
-      // Let's implement exactly as requested.
-      
       let transferUrl = `https://api.helius.xyz/v1/wallet/${walletAddress}/transfers?limit=${limit}&api-key=${this.apiKey}`;
       if (nextCursor) {
         transferUrl += `&cursor=${nextCursor}`;
@@ -67,8 +61,7 @@ export class HeliusService {
         // Check if response has data array
         const data = response.data || [];
         
-        // Filter immediately to save memory if needed, but logic says fetch then filter.
-        // Let's just accumulate raw data first.
+        // Accumulate raw data
         allTransfers = [...allTransfers, ...data];
 
         // Check pagination
@@ -84,77 +77,86 @@ export class HeliusService {
     }
 
     // Step 2: Filter transfers
-    // Include transfers where: 
-    // 1. direction === "out" AND symbol === "SOL"
-    // 2. direction === "out" AND symbol !== "SOL" (Token transfers)
-    const outgoingTransfers = allTransfers.filter((t: any) => 
-        t.direction === 'out'
-    );
+    // Only process if symbol === "SOL"
+    const solTransfers = allTransfers.filter((t: any) => t.symbol === 'SOL');
 
-    // Step 3: Build recipient map
-    const recipientMap = new Map<string, { totalSol: number, totalTokens: number, count: number, lastTime: number }>();
+    // Step 3: Build map
+    const walletMap = new Map<string, { 
+        sent: number, 
+        received: number, 
+        countSent: number, 
+        countReceived: number, 
+        lastTime: number 
+    }>();
 
-    for (const t of outgoingTransfers) {
-        // The counterparty is the recipient when direction is 'out'
-        const recipient = t.counterparty; 
-        if (!recipient) continue;
+    for (const t of solTransfers) {
+        const counterparty = t.counterparty;
+        if (!counterparty) continue;
 
         const amount = t.amount || 0;
         const timestamp = t.timestamp || 0;
-        const isSol = t.symbol === 'SOL';
+        const direction = t.direction; // 'out' or 'in'
 
-        const current = recipientMap.get(recipient) || { totalSol: 0, totalTokens: 0, count: 0, lastTime: 0 };
-        
-        if (isSol) {
-            current.totalSol += amount;
-        } else {
-            // For tokens, we just sum the raw amount for now as different tokens have different values.
-            // But the requirement is "minimum 10 million tokens".
-            current.totalTokens += amount;
+        const current = walletMap.get(counterparty) || { 
+            sent: 0, 
+            received: 0, 
+            countSent: 0, 
+            countReceived: 0, 
+            lastTime: 0 
+        };
+
+        if (direction === 'out') {
+            current.sent += amount;
+            current.countSent += 1;
+        } else if (direction === 'in') {
+            current.received += amount;
+            current.countReceived += 1;
         }
 
-        current.count += 1;
         if (timestamp > current.lastTime) {
             current.lastTime = timestamp;
         }
 
-        recipientMap.set(recipient, current);
+        walletMap.set(counterparty, current);
     }
 
-    // Step 4: Filter wallets (Total SOL >= 1 OR Total Tokens >= 10,000,000)
+    // Step 4: Filter and Classify
     const results: ConnectedWalletResult[] = [];
 
-    for (const [address, data] of recipientMap.entries()) {
-        const meetsSolCriteria = data.totalSol >= 1;
-        const meetsTokenCriteria = data.totalTokens >= 10000000;
+    for (const [address, data] of walletMap.entries()) {
+        const totalSent = data.sent;
+        const totalReceived = data.received;
 
-        if (meetsSolCriteria || meetsTokenCriteria) {
+        // Filter: Keep if total_sent >= 0.5 OR total_received >= 0.5
+        if (totalSent >= 0.5 || totalReceived >= 0.5) {
             let classification = "Connected";
-            
-            if (data.totalSol >= 5 || data.totalTokens >= 50000000) classification = "Major Capital Move";
-            else if (data.count >= 3) classification = "Repeated Routing";
-            
-            if (meetsTokenCriteria && !meetsSolCriteria) {
-                classification = "Token Storage";
+
+            if (totalSent >= 0.5 && totalReceived >= 0.5) {
+                classification = "Strongly Linked Wallet";
+            } else if (totalSent >= 0.5) {
+                classification = "Side Wallet";
+            } else if (totalReceived >= 0.5) {
+                classification = "Funding Wallet";
             }
 
             results.push({
                 wallet: address,
-                total_sol_received: data.totalSol,
-                total_tokens_received: data.totalTokens,
-                transfer_count: data.count,
+                total_sol_sent: totalSent,
+                total_sol_received: totalReceived,
+                transfer_count_sent: data.countSent,
+                transfer_count_received: data.countReceived,
                 last_transfer_time: data.lastTime,
                 classification
             });
         }
     }
 
-    // Step 5: Sort descending by totalSOLSent (primary) then totalTokens (secondary)
-    return results.sort((a, b) => {
-        if (b.total_sol_received !== a.total_sol_received) {
-            return b.total_sol_received - a.total_sol_received;
-        }
-        return b.total_tokens_received - a.total_tokens_received;
-    });
+    // Step 5: Sort descending by total activity (sent + received)
+    results.sort((a, b) => (b.total_sol_sent + b.total_sol_received) - (a.total_sol_sent + a.total_sol_received));
+
+    return {
+        results,
+        scanned_count: allTransfers.length
+    };
   }
 }
