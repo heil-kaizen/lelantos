@@ -24,6 +24,10 @@ export const AnalysisForm: React.FC<AnalysisFormProps> = ({ status, onAnalyze })
     }
   };
 
+  const handleClearAll = () => {
+    setTokens(['', '']);
+  };
+
   const handleTokenChange = (index: number, value: string) => {
     const newTokens = [...tokens];
     newTokens[index] = value;
@@ -83,6 +87,16 @@ export const AnalysisForm: React.FC<AnalysisFormProps> = ({ status, onAnalyze })
                 )}
               </div>
             ))}
+          </div>
+          
+          <div className="mt-4 flex justify-end">
+            <button
+                type="button"
+                onClick={handleClearAll}
+                className="text-xs font-bold text-skin-muted hover:text-red-600 underline decoration-dotted underline-offset-2 transition-colors"
+            >
+                Clear All Inputs
+            </button>
           </div>
         </div>
 
