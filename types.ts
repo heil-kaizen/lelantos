@@ -49,6 +49,8 @@ export interface WalletOverlap {
   tags?: string[];
   portfolioValue?: number;
   avgHoldingDuration?: number; // in hours
+  domain?: string;
+  social?: string;
 
   // New Feature Fields
   is_top_trader?: boolean;
