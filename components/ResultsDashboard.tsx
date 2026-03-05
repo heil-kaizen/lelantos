@@ -1,18 +1,53 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AnalysisResult } from '../types';
 import { ExternalLink, Copy, CheckCircle, AlertTriangle, Users, Wallet, TrendingUp } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { EarlyBuyersAnalysis } from './EarlyBuyersAnalysis';
+import { HeliusService } from '../services/heliusService';
 
 interface ResultsDashboardProps {
   results: AnalysisResult;
   theme?: 'light' | 'dark' | 'night';
   apiKey: string;
+  heliusApiKey?: string;
 }
 
-export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, theme = 'light', apiKey }) => {
+export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, theme = 'light', apiKey, heliusApiKey }) => {
   const [copied, setCopied] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'score' | 'portfolio' | 'holdings'>('score');
+  const [identities, setIdentities] = useState<Record<string, { domain?: string, social?: string }>>({});
+
+  // Fetch identities for top wallets if Helius Key is provided
+  useEffect(() => {
+    if (!heliusApiKey) return;
+
+    const fetchIdentities = async () => {
+        const service = new HeliusService(heliusApiKey);
+        // Prioritize top 20 wallets by score to avoid excessive API calls
+        const topWallets = [...results.overlaps]
+            .sort((a, b) => (b.score || 0) - (a.score || 0))
+            .slice(0, 20);
+
+        for (const wallet of topWallets) {
+            // Skip if already fetched
+            if (identities[wallet.address]) continue;
+
+            try {
+                const identity = await service.getWalletIdentity(wallet.address);
+                if (identity.domain || identity.social) {
+                    setIdentities(prev => ({
+                        ...prev,
+                        [wallet.address]: identity
+                    }));
+                }
+            } catch (e) {
+                // Silent fail
+            }
+        }
+    };
+
+    fetchIdentities();
+  }, [results, heliusApiKey]);
 
   // Inject styles to remove Recharts focus outline
   React.useEffect(() => {
@@ -220,9 +255,27 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, the
                             {/* Wallet & Tags */}
                             <td className="px-6 py-4">
                                 <div className="flex flex-col gap-1">
-                                    <span className="font-mono text-skin-text font-bold">
-                                        {overlap.address.slice(0, 4)}...{overlap.address.slice(-4)}
-                                    </span>
+                                    {identities[overlap.address]?.domain ? (
+                                        <div className="flex flex-col">
+                                            <span className="font-mono text-indigo-600 font-bold">
+                                                {identities[overlap.address]?.domain}
+                                            </span>
+                                            <span className="text-[10px] text-skin-muted font-mono">
+                                                {overlap.address.slice(0, 4)}...{overlap.address.slice(-4)}
+                                            </span>
+                                        </div>
+                                    ) : (
+                                        <span className="font-mono text-skin-text font-bold">
+                                            {overlap.address.slice(0, 4)}...{overlap.address.slice(-4)}
+                                        </span>
+                                    )}
+                                    
+                                    {identities[overlap.address]?.social && (
+                                        <span className="text-[10px] text-blue-500 font-bold flex items-center gap-1">
+                                            @{identities[overlap.address]?.social?.replace('@', '')}
+                                        </span>
+                                    )}
+
                                     <div className="flex flex-wrap gap-1 mt-1">
                                         {overlap.tags && overlap.tags.length > 0 ? (
                                             overlap.tags.map(tag => (
