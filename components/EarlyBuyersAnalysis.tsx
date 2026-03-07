@@ -47,6 +47,21 @@ export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ tokens
     const buyerMap = new Map<string, any[]>();
     const traderMap = new Map<string, any[]>();
 
+    // Known System/LP Addresses to exclude
+    const EXCLUDED_ADDRESSES = new Set([
+        '5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1', // Raydium Authority
+        '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8', // Raydium V4
+        'srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX', // Serum
+        'SysvarRent111111111111111111111111111111111', // Rent
+        'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', // Token Program
+        'TSWAPaqyCSx2KABk68Shruf4rp7CxcNi8hAsbdwmHbN', // Tensor
+        'M2mx93ekt1fmXSVkTrUL9xVFHkmME8HTUi5Cyc5aF7K', // Magic Eden
+        'C6v1x1gY1x1gY1x1gY1x1gY1x1gY1x1gY1x1gY1x1gY', // Metaplex
+        'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s', // Token Metadata
+        'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK', // Raydium CLMM
+        '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin', // Serum V3
+    ]);
+
     try {
         for (let i = 0; i < tokens.length; i++) {
             const token = tokens[i];
@@ -55,6 +70,7 @@ export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ tokens
             try {
                 const buyers = await tracker.getFirstBuyers(token.token);
                 for (const b of buyers) {
+                    if (EXCLUDED_ADDRESSES.has(b.wallet)) continue;
                     if (!buyerMap.has(b.wallet)) buyerMap.set(b.wallet, []);
                     buyerMap.get(b.wallet)?.push({ ...b, tokenSymbol: token.symbol });
                 }
@@ -68,7 +84,7 @@ export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ tokens
                 const traders = await tracker.getTopTraders(token.token);
                 for (const t of traders) {
                     const wallet = t.wallet || t.owner || t.address;
-                    if (wallet) {
+                    if (wallet && !EXCLUDED_ADDRESSES.has(wallet) && wallet !== token.token) {
                         if (!traderMap.has(wallet)) traderMap.set(wallet, []);
                         traderMap.get(wallet)?.push({ ...t, tokenSymbol: token.symbol });
                     }
@@ -91,9 +107,17 @@ export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ tokens
                     let wins = 0;
 
                     for (const e of entries) {
-                        // Normalize PnL/ROI fields based on API response structure
-                        const pnl = e.total || e.pnl || 0;
-                        const roi = e.roi || (e.total_invested ? (e.total / e.total_invested) * 100 : 0);
+                        // Fix PnL/ROI Logic
+                        // Prioritize 'pnl' field. Do NOT use 'total' as it likely represents volume.
+                        const pnl = e.pnl !== undefined ? e.pnl : 0;
+                        
+                        // Prioritize 'roi' field.
+                        let roi = e.roi !== undefined ? e.roi : 0;
+                        
+                        // Fallback ROI calculation only if 'roi' is missing and we have invested amount
+                        if (e.roi === undefined && e.total_invested && e.total_invested > 0) {
+                             roi = (pnl / e.total_invested) * 100;
+                        }
                         
                         totalPnl += pnl;
                         totalRoi += roi;
