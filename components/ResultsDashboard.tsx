@@ -244,7 +244,7 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, the
                     <tr>
                         <th className="px-6 py-4">Wallet / Tags</th>
                         <th className="px-6 py-4 text-center">Score</th>
-                        <th className="px-6 py-4">Portfolio / PnL</th>
+                        <th className="px-6 py-4">Portfolio</th>
                         <th className="px-6 py-4">Holdings</th>
                         <th className="px-6 py-4 text-right">Actions</th>
                     </tr>
@@ -302,7 +302,7 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, the
                                 </div>
                             </td>
 
-                            {/* Portfolio Value & PnL */}
+                            {/* Portfolio Value */}
                             <td className="px-6 py-4">
                                 <div className="flex flex-col gap-1">
                                     <div className="flex items-center gap-1.5">
@@ -313,18 +313,6 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, the
                                                 : 'N/A'}
                                         </span>
                                     </div>
-                                    {overlap.wallet_summary && (
-                                        <div className="flex flex-col gap-0.5 text-xs">
-                                            <div className="flex items-center gap-1">
-                                                <span className="text-skin-muted">PnL:</span>
-                                                <span className={`font-bold ${overlap.wallet_summary.total_realized_pnl && overlap.wallet_summary.total_realized_pnl > 0 ? 'text-green-600' : overlap.wallet_summary.total_realized_pnl && overlap.wallet_summary.total_realized_pnl < 0 ? 'text-red-600' : 'text-skin-text'}`}>
-                                                    {overlap.wallet_summary.total_realized_pnl 
-                                                        ? `$${overlap.wallet_summary.total_realized_pnl.toLocaleString(undefined, {maximumFractionDigits: 0})}`
-                                                        : '$0'}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
                             </td>
 
