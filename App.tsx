@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AnalysisForm } from './components/AnalysisForm';
 import { ResultsDashboard } from './components/ResultsDashboard';
-import { ApiKeyInput } from './components/ApiKeyInput';
 import { ConnectedWalletsAnalysis } from './components/ConnectedWalletsAnalysis';
 import { SolanaTrackerService } from './services/solanaTrackerService';
 import { AppStatus, AnalysisResult } from './types';
@@ -13,8 +12,8 @@ const App: React.FC = () => {
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
   const [results, setResults] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [apiKey, setApiKey] = useState<string>(""); 
-  const [heliusApiKey, setHeliusApiKey] = useState<string>("");
+  const [apiKey] = useState<string>(import.meta.env.VITE_SOLANA_TRACKER_API_KEY || ""); 
+  const [heliusApiKey] = useState<string>(import.meta.env.VITE_HELIUS_API_KEY || "");
   const [theme, setTheme] = useState<Theme>('light');
 
   useEffect(() => {
@@ -111,13 +110,21 @@ const App: React.FC = () => {
           
           {/* Left Sidebar: Controls */}
           <div className={`${status === AppStatus.COMPLETED ? 'lg:col-span-3' : 'lg:col-span-4'} space-y-8 transition-all duration-300`}>
-            <ApiKeyInput 
-              apiKey={apiKey} 
-              setApiKey={setApiKey} 
-              heliusApiKey={heliusApiKey}
-              setHeliusApiKey={setHeliusApiKey}
-            />
             <AnalysisForm status={status} onAnalyze={handleAnalyze} />
+            
+            {/* How it Works Section */}
+            <div className="bg-skin-card p-6 rounded-xl border-2 border-skin-border shadow-[4px_4px_0px_0px_var(--color-shadow)]">
+                <h3 className="text-lg font-black text-skin-text mb-3 flex items-center gap-2">
+                    <Activity size={20} className="text-skin-muted" />
+                    How it Works
+                </h3>
+                <p className="text-sm text-skin-muted font-medium leading-relaxed">
+                    This tool scans the holder lists of the tokens you enter to find <strong className="text-skin-text">Overlapping Wallets</strong>—addresses that hold multiple tokens from your list.
+                </p>
+                <p className="text-sm text-skin-muted font-medium leading-relaxed mt-3">
+                    Finding the same wallet across 2+ tokens often indicates a recurring trader, a coordinated group, or a 'smart wallet' following a specific narrative. We then analyze these wallets to reveal their PnL, win rate, and trading tags.
+                </p>
+            </div>
           </div>
 
           {/* Right Content: Results */}
