@@ -62,18 +62,10 @@ export class HeliusService {
   }
 
   async traceConnectedWallets(walletAddress: string): Promise<{ results: ConnectedWalletResult[], scanned_count: number }> {
-    const limit = 50;
-    const maxRawScanned = 2000;
-    const maxValidTransfers = 200;
+    const limit = 100;
+    const maxRawScanned = 700;
     
-    let rawScanned = 0;
-    let validTransfersCount = 0;
-    let nextCursor: string | undefined;
-    let beforeSignature: string | undefined;
-    let hasMore = true;
-
     // Maps to aggregate data
-    // Key: Counterparty Address
     const outgoingMap = new Map<string, number>();
     const incomingMap = new Map<string, number>();
     const walletStats = new Map<string, { 
@@ -82,84 +74,78 @@ export class HeliusService {
         lastTime: number 
     }>();
 
-    // Step 1: Scan Loop
-    while (hasMore && rawScanned < maxRawScanned && validTransfersCount < maxValidTransfers) {
-      let transferUrl = `https://api.helius.xyz/v1/wallet/${walletAddress}/transfers?limit=${limit}&api-key=${this.apiKey}`;
-      
-      // Support both cursor-based and signature-based pagination
-      if (nextCursor) {
-        transferUrl += `&cursor=${nextCursor}`;
-      } else if (beforeSignature) {
-        transferUrl += `&before=${beforeSignature}`;
-      }
+    let rawScanned = 0;
+    let beforeSignature: string | undefined;
+    let hasMore = true;
 
-      try {
-        const response = await this.fetchWithRetry(transferUrl);
-        
-        // Handle response structure (support both direct array and data object)
-        const data = Array.isArray(response) ? response : (response.data || []);
-        
-        if (data.length === 0) {
-            hasMore = false;
-            break;
-        }
-
-        for (const t of data) {
-            rawScanned++;
+    try {
+        while (hasMore && rawScanned < maxRawScanned) {
+            let url = `https://api.helius.xyz/v1/wallet/${walletAddress}/transfers?limit=${limit}&api-key=${this.apiKey}`;
             
-            // Check limits inside loop to break early
-            if (rawScanned > maxRawScanned) break;
-
-            // 1. Filter: Symbol must be SOL
-            if (t.symbol !== 'SOL') continue;
-
-            // 2. Filter: Ignore dust (< 0.05 SOL)
-            const amount = t.amount || 0;
-            if (amount < 0.05) continue;
-
-            // Valid Transfer Found
-            validTransfersCount++;
-
-            const counterparty = t.counterparty;
-            if (!counterparty) continue;
-            if (counterparty === walletAddress) continue; // Ignore self
-
-            const timestamp = t.timestamp || 0;
-            const direction = t.direction; // 'out' or 'in'
-
-            // Update Stats
-            const stats = walletStats.get(counterparty) || { countSent: 0, countReceived: 0, lastTime: 0 };
-            if (timestamp > stats.lastTime) stats.lastTime = timestamp;
-
-            if (direction === 'out') {
-                outgoingMap.set(counterparty, (outgoingMap.get(counterparty) || 0) + amount);
-                stats.countSent++;
-            } else if (direction === 'in') {
-                incomingMap.set(counterparty, (incomingMap.get(counterparty) || 0) + amount);
-                stats.countReceived++;
+            if (beforeSignature) {
+                url += `&before=${beforeSignature}`;
             }
-            walletStats.set(counterparty, stats);
-        }
 
-        // Pagination Logic
-        if (response.pagination && response.pagination.hasMore && response.pagination.nextCursor) {
-            nextCursor = response.pagination.nextCursor;
-        } else if (data.length > 0 && data[data.length - 1].signature) {
-             // Fallback for standard Helius pagination (use last signature)
-             beforeSignature = data[data.length - 1].signature;
-             
-             // If we received fewer items than the limit, we've reached the end
-             if (data.length < limit) {
-                 hasMore = false;
-             }
-        } else {
-            hasMore = false;
-        }
+            const response = await this.fetchWithRetry(url);
+            const data = Array.isArray(response) ? response : (response.data || []);
 
-      } catch (e) {
+            if (data.length === 0) {
+                hasMore = false;
+                break;
+            }
+
+            for (const t of data) {
+                rawScanned++;
+                if (rawScanned > maxRawScanned) break;
+
+                // 1. Filter: Symbol must be SOL
+                if (t.symbol !== 'SOL') continue;
+
+                // 2. Filter: Ignore dust (< 0.05 SOL)
+                const amount = t.amount || 0;
+                if (amount < 0.05) continue;
+
+                const counterparty = t.counterparty;
+                if (!counterparty) continue;
+                if (counterparty === walletAddress) continue; // Ignore self
+
+                const timestamp = t.timestamp || 0;
+                const direction = t.direction; // 'out' or 'in'
+
+                // Update Stats
+                const stats = walletStats.get(counterparty) || { countSent: 0, countReceived: 0, lastTime: 0 };
+                if (timestamp > stats.lastTime) stats.lastTime = timestamp;
+
+                if (direction === 'out') {
+                    outgoingMap.set(counterparty, (outgoingMap.get(counterparty) || 0) + amount);
+                    stats.countSent++;
+                } else if (direction === 'in') {
+                    incomingMap.set(counterparty, (incomingMap.get(counterparty) || 0) + amount);
+                    stats.countReceived++;
+                }
+                walletStats.set(counterparty, stats);
+            }
+
+            // Pagination Logic
+            if (data.length > 0) {
+                // Helius v1/transfers uses the last signature for pagination via 'before'
+                const lastItem = data[data.length - 1];
+                if (lastItem.signature) {
+                    beforeSignature = lastItem.signature;
+                } else {
+                    hasMore = false;
+                }
+
+                // If we got fewer items than the limit, we've reached the end
+                if (data.length < limit) {
+                    hasMore = false;
+                }
+            } else {
+                hasMore = false;
+            }
+        }
+    } catch (e) {
         console.error("Error fetching Helius transfers:", e);
-        hasMore = false;
-      }
     }
 
     // Step 2: Classify and Filter Results
