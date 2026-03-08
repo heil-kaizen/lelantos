@@ -22,7 +22,7 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
         return;
     }
     if (!heliusApiKey) {
-        setError("Please enter your Helius API Key in the sidebar.");
+        setError("Helius API Key not found. Please set VITE_HELIUS_API_KEY in your environment variables.");
         return;
     }
 
@@ -122,10 +122,10 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
             </div>
         )}
 
-        {!loading && scannedCount >= 700 && (
+        {!loading && scannedCount >= 2000 && (
             <div className="mt-4 bg-orange-100 border-2 border-orange-200 text-orange-800 p-4 rounded-xl font-bold flex items-center gap-2">
                 <AlertCircle size={20} />
-                High activity wallet — scanning limited to last 700 transfers.
+                High activity wallet — scanning limited to last 2000 transfers.
             </div>
         )}
       </div>
@@ -203,12 +203,18 @@ export const ConnectedWalletsAnalysis: React.FC<ConnectedWalletsAnalysisProps> =
                     ))}
                     {results.length === 0 && (
                         <tr>
-                            <td colSpan={7} className="px-6 py-12 text-center text-skin-muted font-bold">
-                                No connected wallets found with ≥ 0.5 SOL activity.
-                                <br/>
-                                <span className="text-xs font-normal opacity-70">
-                                    (Scanned {scannedCount} transactions. If a transfer existed, it may be beyond this depth.)
-                                </span>
+                            <td colSpan={7} className="px-6 py-12 text-center text-skin-muted">
+                                <div className="flex flex-col items-center gap-2">
+                                    <p className="font-bold text-lg">No connected wallets detected above the 0.5 SOL threshold.</p>
+                                    <div className="text-sm text-left mt-2 bg-skin-base p-4 rounded-lg border-2 border-skin-border/50">
+                                        <p className="font-bold mb-1">Possible reasons:</p>
+                                        <ul className="list-disc list-inside space-y-1 opacity-80">
+                                            <li>Transfers may be smaller than the dust filter (0.05 SOL).</li>
+                                            <li>Transfers may have occurred deeper than the scanned history ({scannedCount} txs).</li>
+                                            <li>The wallet may not have interacted with other wallets directly.</li>
+                                        </ul>
+                                    </div>
+                                </div>
                             </td>
                         </tr>
                     )}
