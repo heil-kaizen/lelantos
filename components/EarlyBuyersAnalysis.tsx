@@ -108,9 +108,17 @@ export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ tokens
 
                     for (const e of entries) {
                         // Fix PnL/ROI Logic
-                        // Prioritize 'pnl' field. Do NOT use 'total' as it likely represents volume.
-                        const pnl = e.pnl !== undefined ? e.pnl : 0;
+                        let pnl = 0;
                         
+                        // Check for direct 'pnl' field (Top Traders)
+                        if (e.pnl !== undefined) {
+                            pnl = e.pnl;
+                        } 
+                        // Check for 'realized' + 'unrealized' (First Buyers)
+                        else if (e.realized !== undefined || e.unrealized !== undefined) {
+                            pnl = (e.realized || 0) + (e.unrealized || 0);
+                        }
+
                         // Prioritize 'roi' field.
                         let roi = e.roi !== undefined ? e.roi : 0;
                         
