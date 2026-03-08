@@ -22,7 +22,7 @@ const App: React.FC = () => {
 
   const handleAnalyze = async (tokens: string[]) => {
     if (!apiKey) {
-      setError("Please enter your SolanaTracker API Key in the sidebar.");
+      setError("API Key not found. Please set VITE_SOLANA_TRACKER_API_KEY in your environment variables.");
       return;
     }
 
