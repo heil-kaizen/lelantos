@@ -62,103 +62,118 @@ export class HeliusService {
   }
 
   async traceConnectedWallets(walletAddress: string): Promise<{ results: ConnectedWalletResult[], scanned_count: number }> {
-    const limit = 100;
-    const maxTransfers = 700; // Updated to 700 as requested
-    let allTransfers: any[] = [];
+    const limit = 50;
+    const maxRawScanned = 2000;
+    const maxValidTransfers = 200;
+    
+    let rawScanned = 0;
+    let validTransfersCount = 0;
     let nextCursor: string | undefined;
+    let beforeSignature: string | undefined;
     let hasMore = true;
 
-    // Step 1: Fetch transfers with pagination
-    while (hasMore && allTransfers.length < maxTransfers) {
-      let transferUrl = `https://api.helius.xyz/v1/wallet/${walletAddress}/transfers?limit=${limit}&api-key=${this.apiKey}`;
-      if (nextCursor) {
-        transferUrl += `&cursor=${nextCursor}`;
-      }
-
-      try {
-        // The fetchWithRetry method already uses enqueueRequest which adds a DELAY_MS (1200ms) delay.
-        const response = await this.fetchWithRetry(transferUrl);
-        
-        // Check if response has data array
-        const data = response.data || [];
-        
-        if (data.length === 0) {
-            hasMore = false;
-        } else {
-            // Accumulate raw data
-            allTransfers = [...allTransfers, ...data];
-
-            // Check pagination
-            if (response.pagination && response.pagination.hasMore && response.pagination.nextCursor) {
-                nextCursor = response.pagination.nextCursor;
-            } else {
-                hasMore = false;
-            }
-        }
-      } catch (e) {
-        console.error("Error fetching Helius transfers:", e);
-        hasMore = false; // Stop on error
-      }
-    }
-
-    // Step 2: Filter transfers
-    // Only process if symbol === "SOL"
-    const solTransfers = allTransfers.filter((t: any) => t.symbol === 'SOL');
-
-    // Step 3: Build map
-    const walletMap = new Map<string, { 
-        sent: number, 
-        received: number, 
+    // Maps to aggregate data
+    // Key: Counterparty Address
+    const outgoingMap = new Map<string, number>();
+    const incomingMap = new Map<string, number>();
+    const walletStats = new Map<string, { 
         countSent: number, 
         countReceived: number, 
         lastTime: number 
     }>();
 
-    for (const t of solTransfers) {
-        const counterparty = t.counterparty;
-        if (!counterparty) continue;
+    // Step 1: Scan Loop
+    while (hasMore && rawScanned < maxRawScanned && validTransfersCount < maxValidTransfers) {
+      let transferUrl = `https://api.helius.xyz/v1/wallet/${walletAddress}/transfers?limit=${limit}&api-key=${this.apiKey}`;
+      
+      // Support both cursor-based and signature-based pagination
+      if (nextCursor) {
+        transferUrl += `&cursor=${nextCursor}`;
+      } else if (beforeSignature) {
+        transferUrl += `&before=${beforeSignature}`;
+      }
+
+      try {
+        const response = await this.fetchWithRetry(transferUrl);
         
-        // Ignore self-transfers
-        if (counterparty === walletAddress) continue;
-
-        const amount = t.amount || 0;
-        const timestamp = t.timestamp || 0;
-        const direction = t.direction; // 'out' or 'in'
-
-        const current = walletMap.get(counterparty) || { 
-            sent: 0, 
-            received: 0, 
-            countSent: 0, 
-            countReceived: 0, 
-            lastTime: 0 
-        };
-
-        if (direction === 'out') {
-            current.sent += amount;
-            current.countSent += 1;
-        } else if (direction === 'in') {
-            current.received += amount;
-            current.countReceived += 1;
+        // Handle response structure (support both direct array and data object)
+        const data = Array.isArray(response) ? response : (response.data || []);
+        
+        if (data.length === 0) {
+            hasMore = false;
+            break;
         }
 
-        if (timestamp > current.lastTime) {
-            current.lastTime = timestamp;
+        for (const t of data) {
+            rawScanned++;
+            
+            // Check limits inside loop to break early
+            if (rawScanned > maxRawScanned) break;
+
+            // 1. Filter: Symbol must be SOL
+            if (t.symbol !== 'SOL') continue;
+
+            // 2. Filter: Ignore dust (< 0.05 SOL)
+            const amount = t.amount || 0;
+            if (amount < 0.05) continue;
+
+            // Valid Transfer Found
+            validTransfersCount++;
+
+            const counterparty = t.counterparty;
+            if (!counterparty) continue;
+            if (counterparty === walletAddress) continue; // Ignore self
+
+            const timestamp = t.timestamp || 0;
+            const direction = t.direction; // 'out' or 'in'
+
+            // Update Stats
+            const stats = walletStats.get(counterparty) || { countSent: 0, countReceived: 0, lastTime: 0 };
+            if (timestamp > stats.lastTime) stats.lastTime = timestamp;
+
+            if (direction === 'out') {
+                outgoingMap.set(counterparty, (outgoingMap.get(counterparty) || 0) + amount);
+                stats.countSent++;
+            } else if (direction === 'in') {
+                incomingMap.set(counterparty, (incomingMap.get(counterparty) || 0) + amount);
+                stats.countReceived++;
+            }
+            walletStats.set(counterparty, stats);
         }
 
-        walletMap.set(counterparty, current);
+        // Pagination Logic
+        if (response.pagination && response.pagination.hasMore && response.pagination.nextCursor) {
+            nextCursor = response.pagination.nextCursor;
+        } else if (data.length > 0 && data[data.length - 1].signature) {
+             // Fallback for standard Helius pagination (use last signature)
+             beforeSignature = data[data.length - 1].signature;
+             
+             // If we received fewer items than the limit, we've reached the end
+             if (data.length < limit) {
+                 hasMore = false;
+             }
+        } else {
+            hasMore = false;
+        }
+
+      } catch (e) {
+        console.error("Error fetching Helius transfers:", e);
+        hasMore = false;
+      }
     }
 
-    // Step 4: Filter and Classify
+    // Step 2: Classify and Filter Results
     const results: ConnectedWalletResult[] = [];
+    const allCounterparties = new Set([...outgoingMap.keys(), ...incomingMap.keys()]);
 
-    for (const [address, data] of walletMap.entries()) {
-        const totalSent = data.sent;
-        const totalReceived = data.received;
+    for (const address of allCounterparties) {
+        const totalSent = outgoingMap.get(address) || 0;
+        const totalReceived = incomingMap.get(address) || 0;
+        const stats = walletStats.get(address)!;
 
-        // Filter: Keep if total_sent >= 0.5 OR total_received >= 0.5
+        // Threshold Check: >= 0.5 SOL in either direction
         if (totalSent >= 0.5 || totalReceived >= 0.5) {
             let classification = "Connected";
-
             if (totalSent >= 0.5 && totalReceived >= 0.5) {
                 classification = "Strongly Linked Wallet";
             } else if (totalSent >= 0.5) {
@@ -171,18 +186,18 @@ export class HeliusService {
                 wallet: address,
                 total_sol_sent: totalSent,
                 total_sol_received: totalReceived,
-                transfer_count_sent: data.countSent,
-                transfer_count_received: data.countReceived,
-                last_transfer_time: data.lastTime,
+                transfer_count_sent: stats.countSent,
+                transfer_count_received: stats.countReceived,
+                last_transfer_time: stats.lastTime,
                 classification
             });
         }
     }
 
-    // Step 5: Sort descending by total activity (sent + received)
+    // Step 3: Sort by Total Activity
     results.sort((a, b) => (b.total_sol_sent + b.total_sol_received) - (a.total_sol_sent + a.total_sol_received));
 
-    // Step 6: Enrich with Identity (Limit to top 10 to avoid rate limits)
+    // Step 4: Enrich with Identity (Top 10)
     const topResults = results.slice(0, 10);
     const remainingResults = results.slice(10);
     
@@ -193,7 +208,7 @@ export class HeliusService {
 
     return {
         results: [...enrichedResults, ...remainingResults],
-        scanned_count: allTransfers.length
+        scanned_count: rawScanned
     };
   }
 }
