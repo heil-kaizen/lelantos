@@ -1,43 +1,60 @@
 import React, { useState, useEffect } from 'react';
 import { AnalysisForm } from './components/AnalysisForm';
 import { ResultsDashboard } from './components/ResultsDashboard';
+import { EarlyBuyersAnalysis } from './components/EarlyBuyersAnalysis';
 import { ConnectedWalletsAnalysis } from './components/ConnectedWalletsAnalysis';
 import { SolanaTrackerService } from './services/solanaTrackerService';
-import { AppStatus, AnalysisResult } from './types';
-import { Activity, Sun, Moon, Monitor } from 'lucide-react';
+import { AppStatus, AnalysisResult, AnalysisMode } from './types';
+import { Activity, Sun, Moon, Monitor, Users, Clock, Trophy } from 'lucide-react';
 
 type Theme = 'light' | 'dark' | 'night';
 
 const App: React.FC = () => {
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
+  const [mode, setMode] = useState<AnalysisMode>(AnalysisMode.OVERLAPS);
   const [results, setResults] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [apiKey] = useState<string>(import.meta.env.VITE_SOLANA_TRACKER_API_KEY || ""); 
-  const [heliusApiKey] = useState<string>(import.meta.env.VITE_HELIUS_API_KEY || "");
+  const apiKey = import.meta.env.VITE_SOLANA_TRACKER_API_KEY || ""; 
+  const heliusApiKey = import.meta.env.VITE_HELIUS_API_KEY || "";
   const [theme, setTheme] = useState<Theme>('light');
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
-  const handleAnalyze = async (tokens: string[]) => {
+  const handleAnalyze = async (tokens: string[], selectedMode: AnalysisMode) => {
     if (!apiKey) {
       setError("API Key not found. Please set VITE_SOLANA_TRACKER_API_KEY in your environment variables.");
       return;
     }
 
+    setMode(selectedMode);
     setStatus(AppStatus.ANALYZING);
     setError(null);
     setResults(null);
 
     try {
       const service = new SolanaTrackerService(apiKey);
-      const result = await service.analyzeTokens({
-        tokens,
-        apiKey: apiKey
-      });
+      
+      if (selectedMode === AnalysisMode.OVERLAPS) {
+        const result = await service.analyzeTokens({
+          tokens,
+          apiKey: apiKey
+        });
+        setResults(result);
+      } else {
+        // For Early Buyers and Top Traders, we need to fetch token info first
+        const processedTokens = await Promise.all(
+          tokens.map(t => service.getTokenInfo(t))
+        );
+        setResults({
+          overlaps: [],
+          processedTokens,
+          tokenMap: Object.fromEntries(processedTokens.map(t => [t.token, t])),
+          timestamp: Date.now()
+        });
+      }
 
-      setResults(result);
       setStatus(AppStatus.COMPLETED);
     } catch (err: any) {
       console.error(err);
@@ -135,7 +152,7 @@ const App: React.FC = () => {
                     <Activity size={48} className="opacity-40 text-skin-muted" />
                   </div>
                   <p className="text-2xl font-black text-skin-muted">Ready to analyze</p>
-                  <p className="text-base font-medium mt-2">Enter your API Key and token addresses to start.</p>
+                  <p className="text-base font-medium mt-2">Enter token addresses to start.</p>
                </div>
             )}
 
@@ -155,7 +172,20 @@ const App: React.FC = () => {
             )}
 
             {status === AppStatus.COMPLETED && results && (
-              <ResultsDashboard results={results} theme={theme} apiKey={apiKey} heliusApiKey={heliusApiKey} />
+              <>
+                {mode === AnalysisMode.OVERLAPS && (
+                  <ResultsDashboard results={results} theme={theme} apiKey={apiKey} heliusApiKey={heliusApiKey} />
+                )}
+                {(mode === AnalysisMode.EARLY_BUYERS || mode === AnalysisMode.TOP_TRADERS) && (
+                  <div className="bg-skin-card p-6 rounded-xl border-2 border-skin-border shadow-[4px_4px_0px_0px_var(--color-shadow)]">
+                    <EarlyBuyersAnalysis 
+                      tokens={results.processedTokens} 
+                      apiKey={apiKey} 
+                      initialTab={mode === AnalysisMode.EARLY_BUYERS ? 'early_buyers' : 'top_traders'}
+                    />
+                  </div>
+                )}
+              </>
             )}
 
             {status === AppStatus.ERROR && (
