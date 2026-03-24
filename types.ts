@@ -132,3 +132,9 @@ export enum AppStatus {
   COMPLETED = 'COMPLETED',
   ERROR = 'ERROR',
 }
+
+export enum AnalysisMode {
+  OVERLAPS = 'OVERLAPS',
+  EARLY_BUYERS = 'EARLY_BUYERS',
+  TOP_TRADERS = 'TOP_TRADERS',
+}
