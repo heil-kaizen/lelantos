@@ -382,9 +382,6 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, the
             </table>
         </div>
       </div>
-
-      {/* Early Buyers & Top Traders Analysis */}
-      <EarlyBuyersAnalysis tokens={results.processedTokens} apiKey={apiKey} />
     </div>
   );
 };
