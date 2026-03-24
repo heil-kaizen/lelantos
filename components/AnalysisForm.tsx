@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Search, AlertCircle } from 'lucide-react';
-import { AppStatus } from '../types';
+import { Plus, Trash2, Search, AlertCircle, Users, Clock, Trophy } from 'lucide-react';
+import { AppStatus, AnalysisMode } from '../types';
 
 interface AnalysisFormProps {
   status: AppStatus;
-  onAnalyze: (tokens: string[]) => void;
+  onAnalyze: (tokens: string[], mode: AnalysisMode) => void;
 }
 
 export const AnalysisForm: React.FC<AnalysisFormProps> = ({ status, onAnalyze }) => {
@@ -34,9 +34,8 @@ export const AnalysisForm: React.FC<AnalysisFormProps> = ({ status, onAnalyze })
     setTokens(newTokens);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onAnalyze(tokens.filter(t => t.trim() !== ''));
+  const handleSubmit = (mode: AnalysisMode) => {
+    onAnalyze(tokens.filter(t => t.trim() !== ''), mode);
   };
 
   const isValid = tokens.filter(t => t.trim() !== '').length >= 2;
@@ -47,78 +46,105 @@ export const AnalysisForm: React.FC<AnalysisFormProps> = ({ status, onAnalyze })
         <div className="bg-green-300 p-2 rounded border-2 border-skin-border shadow-[2px_2px_0px_0px_var(--color-shadow)]">
           <Search className="w-5 h-5 text-black" />
         </div>
-        <h2 className="text-xl font-black text-skin-text">Start Analysis</h2>
+        <h2 className="text-xl font-black text-skin-text">Token Input</h2>
       </div>
 
-      <form onSubmit={handleSubmit}>
-        <div className="mb-6">
-          <div className="flex justify-between items-center mb-2">
-            <label className="block text-sm font-bold text-skin-text">
-              Token Addresses (Min 2)
-            </label>
-            <button
-              type="button"
-              onClick={handleAddToken}
-              disabled={tokens.length >= 6}
-              className="text-xs flex items-center gap-1 text-blue-600 hover:text-blue-800 font-bold disabled:opacity-50 transition-colors bg-blue-50 px-2 py-1 rounded border border-blue-200 hover:border-blue-400"
-            >
-              <Plus size={14} /> Add Slot
-            </button>
-          </div>
-          
-          <div className="space-y-3">
-            {tokens.map((token, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={token}
-                  onChange={(e) => handleTokenChange(index, e.target.value)}
-                  placeholder={`Token Address ${index + 1}`}
-                  className="flex-grow bg-skin-base border-2 border-skin-border rounded-lg h-11 px-3 text-sm text-skin-text font-medium focus:outline-none focus:shadow-[4px_4px_0px_0px_var(--color-shadow)] transition-all placeholder-skin-muted"
-                />
-                {tokens.length > 2 && (
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveToken(index)}
-                    className="h-11 w-11 flex items-center justify-center text-skin-text hover:bg-red-100 bg-skin-card rounded-lg border-2 border-skin-border transition-colors shadow-[2px_2px_0px_0px_var(--color-shadow)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-          
-          <div className="mt-4 flex justify-end">
-            <button
-                type="button"
-                onClick={handleClearAll}
-                className="text-xs font-bold text-skin-muted hover:text-red-600 underline decoration-dotted underline-offset-2 transition-colors"
-            >
-                Clear All Inputs
-            </button>
-          </div>
+      <div className="mb-6">
+        <div className="flex justify-between items-center mb-2">
+          <label className="block text-sm font-bold text-skin-text">
+            Token Addresses (Min 2)
+          </label>
+          <button
+            type="button"
+            onClick={handleAddToken}
+            disabled={tokens.length >= 6}
+            className="text-xs flex items-center gap-1 text-blue-600 hover:text-blue-800 font-bold disabled:opacity-50 transition-colors bg-blue-50 px-2 py-1 rounded border border-blue-200 hover:border-blue-400"
+          >
+            <Plus size={14} /> Add Slot
+          </button>
         </div>
+        
+        <div className="space-y-3">
+          {tokens.map((token, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <input
+                type="text"
+                value={token}
+                onChange={(e) => handleTokenChange(index, e.target.value)}
+                placeholder={`Token Address ${index + 1}`}
+                className="flex-grow bg-skin-base border-2 border-skin-border rounded-lg h-11 px-3 text-sm text-skin-text font-medium focus:outline-none focus:shadow-[4px_4px_0px_0px_var(--color-shadow)] transition-all placeholder-skin-muted"
+              />
+              {tokens.length > 2 && (
+                <button
+                  type="button"
+                  onClick={() => handleRemoveToken(index)}
+                  className="h-11 w-11 flex items-center justify-center text-skin-text hover:bg-red-100 bg-skin-card rounded-lg border-2 border-skin-border transition-colors shadow-[2px_2px_0px_0px_var(--color-shadow)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+                >
+                  <Trash2 size={18} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        
+        <div className="mt-4 flex justify-end">
+          <button
+              type="button"
+              onClick={handleClearAll}
+              className="text-xs font-bold text-skin-muted hover:text-red-600 underline decoration-dotted underline-offset-2 transition-colors"
+          >
+              Clear All Inputs
+          </button>
+        </div>
+      </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <button
-          type="submit"
+          onClick={() => handleSubmit(AnalysisMode.OVERLAPS)}
           disabled={!isValid || status === AppStatus.ANALYZING}
-          className={`w-full py-3 rounded-lg font-black text-lg transition-all border-2 border-skin-border ${
+          className={`flex flex-col items-center justify-center gap-2 py-4 rounded-xl font-black text-sm transition-all border-2 border-skin-border ${
             !isValid || status === AppStatus.ANALYZING
               ? "bg-skin-muted/20 text-skin-muted cursor-not-allowed"
               : "bg-[#a3e635] text-black shadow-[4px_4px_0px_0px_var(--color-shadow)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_var(--color-shadow)] active:shadow-none"
           }`}
         >
-          {status === AppStatus.ANALYZING ? "Scanning Chain..." : "Analyze Overlaps"}
+          <Users size={20} />
+          <span>Analyze Overlaps</span>
         </button>
-        
-        {!isValid && (
-          <div className="mt-3 flex items-center gap-2 text-amber-600 font-bold text-xs bg-amber-50 p-2 rounded border border-amber-200">
-            <AlertCircle size={14} />
-            <span>Enter at least 2 valid token addresses.</span>
-          </div>
-        )}
-      </form>
+
+        <button
+          onClick={() => handleSubmit(AnalysisMode.EARLY_BUYERS)}
+          disabled={!isValid || status === AppStatus.ANALYZING}
+          className={`flex flex-col items-center justify-center gap-2 py-4 rounded-xl font-black text-sm transition-all border-2 border-skin-border ${
+            !isValid || status === AppStatus.ANALYZING
+              ? "bg-skin-muted/20 text-skin-muted cursor-not-allowed"
+              : "bg-blue-300 text-black shadow-[4px_4px_0px_0px_var(--color-shadow)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_var(--color-shadow)] active:shadow-none"
+          }`}
+        >
+          <Clock size={20} />
+          <span>Early Buyers</span>
+        </button>
+
+        <button
+          onClick={() => handleSubmit(AnalysisMode.TOP_TRADERS)}
+          disabled={!isValid || status === AppStatus.ANALYZING}
+          className={`flex flex-col items-center justify-center gap-2 py-4 rounded-xl font-black text-sm transition-all border-2 border-skin-border ${
+            !isValid || status === AppStatus.ANALYZING
+              ? "bg-skin-muted/20 text-skin-muted cursor-not-allowed"
+              : "bg-yellow-300 text-black shadow-[4px_4px_0px_0px_var(--color-shadow)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_var(--color-shadow)] active:shadow-none"
+          }`}
+        >
+          <Trophy size={20} />
+          <span>Top Traders</span>
+        </button>
+      </div>
+      
+      {!isValid && (
+        <div className="mt-4 flex items-center gap-2 text-amber-600 font-bold text-xs bg-amber-50 p-2 rounded border border-amber-200">
+          <AlertCircle size={14} />
+          <span>Enter at least 2 valid token addresses.</span>
+        </div>
+      )}
     </div>
   );
 };
