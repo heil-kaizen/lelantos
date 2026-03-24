@@ -5,14 +5,22 @@ import { EarlyBuyersAnalysis } from './components/EarlyBuyersAnalysis';
 import { ConnectedWalletsAnalysis } from './components/ConnectedWalletsAnalysis';
 import { SolanaTrackerService } from './services/solanaTrackerService';
 import { AppStatus, AnalysisResult, AnalysisMode } from './types';
-import { Activity, Sun, Moon, Monitor, Users, Clock, Trophy } from 'lucide-react';
+import { Activity, Sun, Moon, Monitor, Users, Clock, Trophy, Trash2, AlertCircle } from 'lucide-react';
 
 type Theme = 'light' | 'dark' | 'night';
 
 const App: React.FC = () => {
-  const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
-  const [mode, setMode] = useState<AnalysisMode>(AnalysisMode.OVERLAPS);
-  const [results, setResults] = useState<AnalysisResult | null>(null);
+  const [status, setStatus] = useState<Record<AnalysisMode, AppStatus>>({
+    [AnalysisMode.OVERLAPS]: AppStatus.IDLE,
+    [AnalysisMode.EARLY_BUYERS]: AppStatus.IDLE,
+    [AnalysisMode.TOP_TRADERS]: AppStatus.IDLE,
+  });
+  const [results, setResults] = useState<Record<AnalysisMode, AnalysisResult | null>>({
+    [AnalysisMode.OVERLAPS]: null,
+    [AnalysisMode.EARLY_BUYERS]: null,
+    [AnalysisMode.TOP_TRADERS]: null,
+  });
+  const [activeModes, setActiveModes] = useState<AnalysisMode[]>([]);
   const [error, setError] = useState<string | null>(null);
   const apiKey = import.meta.env.VITE_SOLANA_TRACKER_API_KEY || ""; 
   const heliusApiKey = import.meta.env.VITE_HELIUS_API_KEY || "";
@@ -28,10 +36,13 @@ const App: React.FC = () => {
       return;
     }
 
-    setMode(selectedMode);
-    setStatus(AppStatus.ANALYZING);
+    // Add to active modes if not already present
+    if (!activeModes.includes(selectedMode)) {
+      setActiveModes(prev => [...prev, selectedMode]);
+    }
+
+    setStatus(prev => ({ ...prev, [selectedMode]: AppStatus.ANALYZING }));
     setError(null);
-    setResults(null);
 
     try {
       const service = new SolanaTrackerService(apiKey);
@@ -41,27 +52,53 @@ const App: React.FC = () => {
           tokens,
           apiKey: apiKey
         });
-        setResults(result);
+        setResults(prev => ({ ...prev, [AnalysisMode.OVERLAPS]: result }));
       } else {
-        // For Early Buyers and Top Traders, we need to fetch token info first
         const processedTokens = await Promise.all(
           tokens.map(t => service.getTokenInfo(t))
         );
-        setResults({
+        const result = {
           overlaps: [],
           processedTokens,
           tokenMap: Object.fromEntries(processedTokens.map(t => [t.token, t])),
           timestamp: Date.now()
-        });
+        };
+        setResults(prev => ({ ...prev, [selectedMode]: result }));
       }
 
-      setStatus(AppStatus.COMPLETED);
+      setStatus(prev => ({ ...prev, [selectedMode]: AppStatus.COMPLETED }));
+      
+      // Scroll to the section after a short delay to allow rendering
+      setTimeout(() => {
+        const element = document.getElementById(`section-${selectedMode}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
+
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "An unexpected error occurred during analysis.");
-      setStatus(AppStatus.ERROR);
+      setError(err.message || `An error occurred during ${selectedMode.toLowerCase()} analysis.`);
+      setStatus(prev => ({ ...prev, [selectedMode]: AppStatus.ERROR }));
     }
   };
+
+  const handleClearAll = () => {
+    setActiveModes([]);
+    setResults({
+      [AnalysisMode.OVERLAPS]: null,
+      [AnalysisMode.EARLY_BUYERS]: null,
+      [AnalysisMode.TOP_TRADERS]: null,
+    });
+    setStatus({
+      [AnalysisMode.OVERLAPS]: AppStatus.IDLE,
+      [AnalysisMode.EARLY_BUYERS]: AppStatus.IDLE,
+      [AnalysisMode.TOP_TRADERS]: AppStatus.IDLE,
+    });
+    setError(null);
+  };
+
+  const isAnyAnalyzing = Object.values(status).some(s => s === AppStatus.ANALYZING);
 
   return (
     <div className="min-h-screen bg-skin-base text-skin-text font-sans selection:bg-lime-300 selection:text-black relative overflow-hidden transition-colors duration-300">
@@ -126,27 +163,42 @@ const App: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
           {/* Left Sidebar: Controls */}
-          <div className={`${status === AppStatus.COMPLETED ? 'lg:col-span-3' : 'lg:col-span-4'} space-y-8 transition-all duration-300`}>
-            <AnalysisForm status={status} onAnalyze={handleAnalyze} />
-            
-            {/* How it Works Section */}
-            <div className="bg-skin-card p-6 rounded-xl border-2 border-skin-border shadow-[4px_4px_0px_0px_var(--color-shadow)]">
-                <h3 className="text-lg font-black text-skin-text mb-3 flex items-center gap-2">
-                    <Activity size={20} className="text-skin-muted" />
-                    How it Works
-                </h3>
-                <p className="text-sm text-skin-muted font-medium leading-relaxed">
-                    This tool scans the holder lists of the tokens you enter to find <strong className="text-skin-text">Overlapping Wallets</strong>—addresses that hold multiple tokens from your list.
-                </p>
-                <p className="text-sm text-skin-muted font-medium leading-relaxed mt-3">
-                    Finding the same wallet across 2+ tokens often indicates a recurring trader, a coordinated group, or a 'smart wallet' following a specific narrative. We then analyze these wallets to reveal their PnL, win rate, and trading tags.
-                </p>
+          <div className="lg:col-span-4 space-y-8">
+            <div className="lg:sticky lg:top-24 space-y-8">
+              <AnalysisForm 
+                status={isAnyAnalyzing ? AppStatus.ANALYZING : AppStatus.IDLE} 
+                onAnalyze={handleAnalyze} 
+              />
+              
+              {activeModes.length > 0 && (
+                <button
+                  onClick={handleClearAll}
+                  className="w-full py-3 rounded-xl font-black text-sm transition-all border-2 border-skin-border bg-red-100 text-red-600 shadow-[4px_4px_0px_0px_var(--color-shadow)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_var(--color-shadow)] active:shadow-none flex items-center justify-center gap-2"
+                >
+                  <Trash2 size={18} />
+                  Clear All Results
+                </button>
+              )}
+
+              {/* How it Works Section */}
+              <div className="bg-skin-card p-6 rounded-xl border-2 border-skin-border shadow-[4px_4px_0px_0px_var(--color-shadow)]">
+                  <h3 className="text-lg font-black text-skin-text mb-3 flex items-center gap-2">
+                      <Activity size={20} className="text-skin-muted" />
+                      How it Works
+                  </h3>
+                  <p className="text-sm text-skin-muted font-medium leading-relaxed">
+                      This tool scans the holder lists of the tokens you enter to find <strong className="text-skin-text">Overlapping Wallets</strong>—addresses that hold multiple tokens from your list.
+                  </p>
+                  <p className="text-sm text-skin-muted font-medium leading-relaxed mt-3">
+                      Finding the same wallet across 2+ tokens often indicates a recurring trader, a coordinated group, or a 'smart wallet' following a specific narrative. We then analyze these wallets to reveal their PnL, win rate, and trading tags.
+                  </p>
+              </div>
             </div>
           </div>
 
           {/* Right Content: Results */}
-          <div className={`${status === AppStatus.COMPLETED ? 'lg:col-span-9' : 'lg:col-span-8'} transition-all duration-300`}>
-            {status === AppStatus.IDLE && (
+          <div className="lg:col-span-8 space-y-12">
+            {activeModes.length === 0 && (
                <div className="h-full flex flex-col items-center justify-center text-skin-muted py-20 border-2 border-dashed border-skin-muted/30 rounded-xl bg-skin-card/50">
                   <div className="bg-skin-base p-6 rounded-full border-2 border-skin-border mb-6">
                     <Activity size={48} className="opacity-40 text-skin-muted" />
@@ -156,44 +208,55 @@ const App: React.FC = () => {
                </div>
             )}
 
-            {status === AppStatus.ANALYZING && (
-              <div className="h-full flex flex-col items-center justify-center py-20">
-                <div className="relative w-20 h-20 mb-8">
-                  <div className="absolute top-0 left-0 w-full h-full border-4 border-skin-muted/20 rounded-full"></div>
-                  <div className="absolute top-0 left-0 w-full h-full border-4 border-skin-border rounded-full border-t-transparent animate-spin"></div>
+            {activeModes.map((activeMode) => (
+              <div key={activeMode} id={`section-${activeMode}`} className="scroll-mt-24 space-y-6">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className={`p-2 rounded border-2 border-skin-border shadow-[2px_2px_0px_0px_var(--color-shadow)] ${
+                    activeMode === AnalysisMode.OVERLAPS ? 'bg-lime-300' : 
+                    activeMode === AnalysisMode.EARLY_BUYERS ? 'bg-blue-300' : 'bg-yellow-300'
+                  }`}>
+                    {activeMode === AnalysisMode.OVERLAPS ? <Users size={20} /> : 
+                     activeMode === AnalysisMode.EARLY_BUYERS ? <Clock size={20} /> : <Trophy size={20} />}
+                  </div>
+                  <h2 className="text-2xl font-black text-skin-text uppercase tracking-tight">
+                    {activeMode.replace('_', ' ')} Analysis
+                  </h2>
                 </div>
-                <h3 className="text-2xl font-black text-skin-text mb-3">Analyzing On-Chain Data</h3>
-                <p className="text-skin-muted font-medium text-base max-w-md text-center bg-skin-card px-6 py-3 rounded-lg border-2 border-skin-border shadow-[4px_4px_0px_0px_var(--color-shadow)]">
-                  Fetching token info and holder lists...
-                  <br/>
-                  <span className="text-xs opacity-60 mt-1 block">Delays added to respect API rate limits.</span>
-                </p>
-              </div>
-            )}
 
-            {status === AppStatus.COMPLETED && results && (
-              <>
-                {mode === AnalysisMode.OVERLAPS && (
-                  <ResultsDashboard results={results} theme={theme} apiKey={apiKey} heliusApiKey={heliusApiKey} />
-                )}
-                {(mode === AnalysisMode.EARLY_BUYERS || mode === AnalysisMode.TOP_TRADERS) && (
-                  <div className="bg-skin-card p-6 rounded-xl border-2 border-skin-border shadow-[4px_4px_0px_0px_var(--color-shadow)]">
-                    <EarlyBuyersAnalysis 
-                      tokens={results.processedTokens} 
-                      apiKey={apiKey} 
-                      initialTab={mode === AnalysisMode.EARLY_BUYERS ? 'early_buyers' : 'top_traders'}
-                    />
+                {status[activeMode] === AppStatus.ANALYZING && (
+                  <div className="flex flex-col items-center justify-center py-12 bg-skin-card rounded-xl border-2 border-skin-border shadow-[4px_4px_0px_0px_var(--color-shadow)]">
+                    <div className="relative w-12 h-12 mb-4">
+                      <div className="absolute top-0 left-0 w-full h-full border-4 border-skin-muted/20 rounded-full"></div>
+                      <div className="absolute top-0 left-0 w-full h-full border-4 border-skin-border rounded-full border-t-transparent animate-spin"></div>
+                    </div>
+                    <p className="font-black text-skin-text">Analyzing Data...</p>
                   </div>
                 )}
-              </>
-            )}
 
-            {status === AppStatus.ERROR && (
-               <div className="h-full flex flex-col items-center justify-center text-skin-muted py-20">
-                 <p className="font-bold text-lg">Analysis failed.</p>
-                 <p>Please check the error message above.</p>
-               </div>
-            )}
+                {status[activeMode] === AppStatus.COMPLETED && results[activeMode] && (
+                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    {activeMode === AnalysisMode.OVERLAPS ? (
+                      <ResultsDashboard results={results[activeMode]!} theme={theme} apiKey={apiKey} heliusApiKey={heliusApiKey} />
+                    ) : (
+                      <div className="bg-skin-card p-6 rounded-xl border-2 border-skin-border shadow-[4px_4px_0px_0px_var(--color-shadow)]">
+                        <EarlyBuyersAnalysis 
+                          tokens={results[activeMode]!.processedTokens} 
+                          apiKey={apiKey} 
+                          initialTab={activeMode === AnalysisMode.EARLY_BUYERS ? 'early_buyers' : 'top_traders'}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {status[activeMode] === AppStatus.ERROR && (
+                  <div className="bg-red-50 border-2 border-red-200 text-red-700 p-4 rounded-xl font-bold flex items-center gap-2">
+                    <AlertCircle size={20} />
+                    Failed to load {activeMode.toLowerCase()} data.
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
 
         </div>
