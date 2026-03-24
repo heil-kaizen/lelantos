@@ -1,4 +1,4 @@
-import { AnalysisConfig, AnalysisResult, Holder, TokenInfo, WalletOverlap, TopTraderMatch, WalletSummary } from '../types';
+import { AnalysisConfig, AnalysisResult, Holder, TokenInfo, WalletOverlap, TopTraderMatch, WalletSummary, FirstBuyer } from '../types';
 
 const BASE_URL = "https://data.solanatracker.io";
 
@@ -29,7 +29,7 @@ export class SolanaTrackerService {
     // Chain the request to the queue
     const result = this.requestQueue.then(requestFn);
     // Update the queue to wait for this request to finish (including its delay)
-    this.requestQueue = result.catch(() => {});
+    this.requestQueue = result.then(() => {}).catch(() => {});
     return result;
   }
 
