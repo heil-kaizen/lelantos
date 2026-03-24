@@ -6,10 +6,11 @@ import { Wallet, TrendingUp, DollarSign, Clock, AlertCircle, ArrowUp, ArrowDown,
 interface EarlyBuyersAnalysisProps {
   tokens: TokenInfo[];
   apiKey: string;
+  initialTab?: 'early_buyers' | 'top_traders';
 }
 
-export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ tokens, apiKey }) => {
-  const [activeTab, setActiveTab] = useState<'early_buyers' | 'top_traders'>('early_buyers');
+export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ tokens, apiKey, initialTab = 'early_buyers' }) => {
+  const [activeTab, setActiveTab] = useState<'early_buyers' | 'top_traders'>(initialTab);
   const [recurringBuyers, setRecurringBuyers] = useState<RecurringWallet[]>([]);
   const [recurringTraders, setRecurringTraders] = useState<RecurringWallet[]>([]);
   const [loading, setLoading] = useState(false);
@@ -18,6 +19,13 @@ export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ tokens
   const [copied, setCopied] = useState<string | null>(null);
 
   const tracker = useMemo(() => new SolanaTrackerService(apiKey), [apiKey]);
+
+  // Auto-scan on mount if tokens are provided
+  React.useEffect(() => {
+    if (tokens.length >= 2) {
+      scanRecurringWallets();
+    }
+  }, [tokens]);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -158,28 +166,18 @@ export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ tokens
   };
 
   return (
-    <div className="mt-12 space-y-8 border-t-4 border-skin-border pt-8">
+    <div className="mt-4 space-y-8">
        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
            <div>
                <h2 className="text-2xl font-black text-skin-text flex items-center gap-2">
-                   <Users className="text-skin-muted" />
-                   Recurring Wallet Finder
+                   {activeTab === 'early_buyers' ? <Clock className="text-blue-500" /> : <Trophy className="text-yellow-500" />}
+                   {activeTab === 'early_buyers' ? 'Recurring Early Buyers' : 'Recurring Top Traders'}
                </h2>
                <p className="text-skin-muted text-sm font-medium mt-1">
-                   Identify wallets that appear as Early Buyers or Top Traders across multiple tokens.
+                   {activeTab === 'early_buyers' 
+                    ? 'Identify wallets that appear as Early Buyers across multiple tokens.' 
+                    : 'Identify wallets that appear as Top Traders across multiple tokens.'}
                </p>
-           </div>
-           
-           <div className="flex items-center gap-2">
-               {!loading && (recurringBuyers.length === 0 && recurringTraders.length === 0) && (
-                   <button 
-                       onClick={scanRecurringWallets}
-                       className="bg-black text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-gray-800 transition-all flex items-center gap-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]"
-                   >
-                       <Search size={18} />
-                       Scan for Recurring Wallets
-                   </button>
-               )}
            </div>
        </div>
 
@@ -207,97 +205,79 @@ export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ tokens
 
        {!loading && (recurringBuyers.length > 0 || recurringTraders.length > 0) && (
            <div className="bg-skin-card rounded-xl border-2 border-skin-border shadow-[4px_4px_0px_0px_var(--color-shadow)] overflow-hidden">
-               {/* Tabs */}
-               <div className="flex border-b-2 border-skin-border bg-skin-base">
-                   <button
-                       onClick={() => setActiveTab('early_buyers')}
-                       className={`flex-1 py-4 font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-colors ${activeTab === 'early_buyers' ? 'bg-skin-card text-skin-text border-r-2 border-skin-border' : 'text-skin-muted hover:bg-skin-card/50'}`}
-                   >
-                       <Clock size={16} className={activeTab === 'early_buyers' ? 'text-blue-500' : ''} />
-                       Recurring Early Buyers ({recurringBuyers.length})
-                   </button>
-                   <button
-                       onClick={() => setActiveTab('top_traders')}
-                       className={`flex-1 py-4 font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-colors ${activeTab === 'top_traders' ? 'bg-skin-card text-skin-text border-l-2 border-skin-border' : 'text-skin-muted hover:bg-skin-card/50'}`}
-                   >
-                       <Trophy size={16} className={activeTab === 'top_traders' ? 'text-yellow-500' : ''} />
-                       Recurring Top Traders ({recurringTraders.length})
-                   </button>
-               </div>
-
-               {/* Content */}
-               <div className="overflow-x-auto max-h-[600px]">
-                   <table className="w-full text-sm text-left">
-                       <thead className="bg-black text-white text-xs uppercase font-bold sticky top-0 z-10">
-                           <tr>
-                               <th className="px-6 py-4">Wallet</th>
-                               <th className="px-6 py-4 text-center">Occurrences</th>
-                               <th className="px-6 py-4">Tokens Found In</th>
-                               <th className="px-6 py-4 text-right">Total PnL</th>
-                               <th className="px-6 py-4 text-right">Avg ROI</th>
-                               <th className="px-6 py-4 text-right">GMGN</th>
-                               <th className="px-6 py-4 text-right">Action</th>
-                           </tr>
-                       </thead>
-                       <tbody className="divide-y-2 divide-skin-border/10 bg-skin-card">
-                           {(activeTab === 'early_buyers' ? recurringBuyers : recurringTraders).map((wallet, i) => (
-                               <tr key={i} className="hover:bg-skin-base transition-colors">
-                                   <td className="px-6 py-4 font-mono font-bold text-xs text-skin-text">
-                                       {wallet.address.slice(0, 4)}...{wallet.address.slice(-4)}
-                                   </td>
-                                   <td className="px-6 py-4 text-center">
-                                       <span className="bg-skin-base border-2 border-skin-border px-2 py-1 rounded font-black text-xs">
-                                           {wallet.occurrences}
-                                       </span>
-                                   </td>
-                                   <td className="px-6 py-4">
-                                       <div className="flex flex-wrap gap-1">
-                                           {wallet.tokens.map(t => (
-                                               <span key={t} className="text-[10px] bg-skin-muted/10 text-skin-text px-1.5 py-0.5 rounded font-bold border border-skin-border/20">
-                                                   {t}
-                                               </span>
-                                           ))}
-                                       </div>
-                                   </td>
-                                   <td className={`px-6 py-4 text-right font-black ${wallet.total_pnl > 0 ? 'text-green-600' : wallet.total_pnl < 0 ? 'text-red-600' : 'text-skin-text'}`}>
-                                       {formatUSD(wallet.total_pnl)}
-                                   </td>
-                                   <td className="px-6 py-4 text-right font-bold text-skin-muted">
-                                       {wallet.avg_roi.toFixed(0)}%
-                                   </td>
-                                   <td className="px-6 py-4 text-right">
-                                       <a 
-                                           href={`https://gmgn.ai/sol/address/${wallet.address}`}
-                                           target="_blank"
-                                           rel="noopener noreferrer"
-                                           className="inline-flex items-center gap-1 text-blue-500 hover:text-blue-600 font-bold hover:underline"
-                                       >
-                                           View <ExternalLink size={14} />
-                                       </a>
-                                   </td>
-                                   <td className="px-6 py-4 text-right">
-                                       <button 
-                                           onClick={() => copyToClipboard(wallet.address)}
-                                           className="p-2 text-skin-muted hover:text-skin-text hover:bg-skin-base rounded-lg border-2 border-transparent hover:border-skin-border transition-all"
-                                           title="Copy Address"
-                                       >
-                                           {copied === wallet.address ? <CheckCircle size={16} className="text-green-500" /> : <Copy size={16} />}
-                                       </button>
-                                   </td>
-                               </tr>
-                           ))}
-                           {(activeTab === 'early_buyers' ? recurringBuyers : recurringTraders).length === 0 && (
-                               <tr>
-                                   <td colSpan={7} className="px-6 py-12 text-center text-skin-muted font-bold">
-                                       No recurring wallets found in this category across the analyzed tokens.
-                                   </td>
-                               </tr>
-                           )}
-                       </tbody>
-                   </table>
-               </div>
-           </div>
-       )}
-    </div>
+                {/* Content */}
+                <div className="overflow-x-auto max-h-[600px]">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-black text-white text-xs uppercase font-bold sticky top-0 z-10">
+                            <tr>
+                                <th className="px-6 py-4">Wallet</th>
+                                <th className="px-6 py-4 text-center">Occurrences</th>
+                                <th className="px-6 py-4">Tokens Found In</th>
+                                <th className="px-6 py-4 text-right">Total PnL</th>
+                                <th className="px-6 py-4 text-right">Avg ROI</th>
+                                <th className="px-6 py-4 text-right">GMGN</th>
+                                <th className="px-6 py-4 text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y-2 divide-skin-border/10 bg-skin-card">
+                            {(activeTab === 'early_buyers' ? recurringBuyers : recurringTraders).map((wallet, i) => (
+                                <tr key={i} className="hover:bg-skin-base transition-colors">
+                                    <td className="px-6 py-4 font-mono font-bold text-xs text-skin-text">
+                                        {wallet.address.slice(0, 4)}...{wallet.address.slice(-4)}
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                        <span className="bg-skin-base border-2 border-skin-border px-2 py-1 rounded font-black text-xs">
+                                            {wallet.occurrences}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex flex-wrap gap-1">
+                                            {wallet.tokens.map(t => (
+                                                <span key={t} className="text-[10px] bg-skin-muted/10 text-skin-text px-1.5 py-0.5 rounded font-bold border border-skin-border/20">
+                                                    {t}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </td>
+                                    <td className={`px-6 py-4 text-right font-black ${wallet.total_pnl > 0 ? 'text-green-600' : wallet.total_pnl < 0 ? 'text-red-600' : 'text-skin-text'}`}>
+                                        {formatUSD(wallet.total_pnl)}
+                                    </td>
+                                    <td className="px-6 py-4 text-right font-bold text-skin-muted">
+                                        {wallet.avg_roi.toFixed(0)}%
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                        <a 
+                                            href={`https://gmgn.ai/sol/address/${wallet.address}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 text-blue-500 hover:text-blue-600 font-bold hover:underline"
+                                        >
+                                            View <ExternalLink size={14} />
+                                        </a>
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                        <button 
+                                            onClick={() => copyToClipboard(wallet.address)}
+                                            className="p-2 text-skin-muted hover:text-skin-text hover:bg-skin-base rounded-lg border-2 border-transparent hover:border-skin-border transition-all"
+                                            title="Copy Address"
+                                        >
+                                            {copied === wallet.address ? <CheckCircle size={16} className="text-green-500" /> : <Copy size={16} />}
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                            {(activeTab === 'early_buyers' ? recurringBuyers : recurringTraders).length === 0 && (
+                                <tr>
+                                    <td colSpan={7} className="px-6 py-12 text-center text-skin-muted font-bold">
+                                        No recurring wallets found in this category across the analyzed tokens.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        )}
+     </div>
   );
 };
