@@ -1,31 +1,18 @@
 import React, { useState, useMemo } from 'react';
-import { TokenInfo, FirstBuyer, RecurringWallet } from '../types';
-import { SolanaTrackerService } from '../services/solanaTrackerService';
+import { AnalysisResult, RecurringWallet } from '../types';
 import { Wallet, TrendingUp, DollarSign, Clock, AlertCircle, ArrowUp, ArrowDown, Search, X, Trophy, Copy, CheckCircle, Users, ExternalLink } from 'lucide-react';
 
 interface EarlyBuyersAnalysisProps {
-  tokens: TokenInfo[];
+  result: AnalysisResult;
   apiKey: string;
   initialTab?: 'early_buyers' | 'top_traders';
 }
 
-export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ tokens, apiKey, initialTab = 'early_buyers' }) => {
-  const [activeTab, setActiveTab] = useState<'early_buyers' | 'top_traders'>(initialTab);
-  const [recurringBuyers, setRecurringBuyers] = useState<RecurringWallet[]>([]);
-  const [recurringTraders, setRecurringTraders] = useState<RecurringWallet[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState({ current: 0, total: 0 });
-  const [error, setError] = useState<string | null>(null);
+export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ result, apiKey, initialTab = 'early_buyers' }) => {
+  const [activeTab] = useState<'early_buyers' | 'top_traders'>(initialTab);
   const [copied, setCopied] = useState<string | null>(null);
 
-  const tracker = useMemo(() => new SolanaTrackerService(apiKey), [apiKey]);
-
-  // Auto-scan on mount if tokens are provided
-  React.useEffect(() => {
-    if (tokens.length >= 2) {
-      scanRecurringWallets();
-    }
-  }, [tokens]);
+  const recurringWallets = result.recurringWallets || [];
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -35,134 +22,6 @@ export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ tokens
 
   const formatUSD = (val: number) => {
       return `$${val.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-  };
-
-  const scanRecurringWallets = async () => {
-    if (tokens.length < 2) {
-        setError("Please analyze at least 2 tokens to find recurring wallets.");
-        return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setRecurringBuyers([]);
-    setRecurringTraders([]);
-    
-    // Total requests = tokens.length * 2 (First Buyers + Top Traders)
-    const totalRequests = tokens.length * 2;
-    setProgress({ current: 0, total: totalRequests });
-
-    const buyerMap = new Map<string, any[]>();
-    const traderMap = new Map<string, any[]>();
-
-    // Known System/LP Addresses to exclude
-    const EXCLUDED_ADDRESSES = new Set([
-        '5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1', // Raydium Authority
-        '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8', // Raydium V4
-        'srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX', // Serum
-        'SysvarRent111111111111111111111111111111111', // Rent
-        'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', // Token Program
-        'TSWAPaqyCSx2KABk68Shruf4rp7CxcNi8hAsbdwmHbN', // Tensor
-        'M2mx93ekt1fmXSVkTrUL9xVFHkmME8HTUi5Cyc5aF7K', // Magic Eden
-        'C6v1x1gY1x1gY1x1gY1x1gY1x1gY1x1gY1x1gY1x1gY', // Metaplex
-        'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s', // Token Metadata
-        'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK', // Raydium CLMM
-        '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin', // Serum V3
-    ]);
-
-    try {
-        for (let i = 0; i < tokens.length; i++) {
-            const token = tokens[i];
-            
-            // 1. Fetch First Buyers
-            try {
-                const buyers = await tracker.getFirstBuyers(token.token);
-                for (const b of buyers) {
-                    if (EXCLUDED_ADDRESSES.has(b.wallet)) continue;
-                    if (!buyerMap.has(b.wallet)) buyerMap.set(b.wallet, []);
-                    buyerMap.get(b.wallet)?.push({ ...b, tokenSymbol: token.symbol });
-                }
-            } catch (e) {
-                console.warn(`Failed buyers for ${token.symbol}`, e);
-            }
-            setProgress(prev => ({ ...prev, current: prev.current + 1 }));
-
-            // 2. Fetch Top Traders
-            try {
-                const traders = await tracker.getTopTraders(token.token);
-                for (const t of traders) {
-                    const wallet = t.wallet || t.owner || t.address;
-                    if (wallet && !EXCLUDED_ADDRESSES.has(wallet) && wallet !== token.token) {
-                        if (!traderMap.has(wallet)) traderMap.set(wallet, []);
-                        traderMap.get(wallet)?.push({ ...t, tokenSymbol: token.symbol });
-                    }
-                }
-            } catch (e) {
-                console.warn(`Failed traders for ${token.symbol}`, e);
-            }
-            setProgress(prev => ({ ...prev, current: prev.current + 1 }));
-        }
-
-        // Process Overlaps
-        const processMap = (map: Map<string, any[]>, type: 'early_buyer' | 'top_trader'): RecurringWallet[] => {
-            const results: RecurringWallet[] = [];
-            for (const [address, entries] of map.entries()) {
-                // Only keep if present in at least 2 tokens
-                const uniqueTokens = new Set(entries.map(e => e.tokenSymbol));
-                if (uniqueTokens.size >= 2) {
-                    let totalPnl = 0;
-                    let totalRoi = 0;
-                    let wins = 0;
-
-                    for (const e of entries) {
-                        // Fix PnL/ROI Logic
-                        let pnl = 0;
-                        
-                        // Check for direct 'pnl' field (Top Traders)
-                        if (e.pnl !== undefined) {
-                            pnl = e.pnl;
-                        } 
-                        // Check for 'realized' + 'unrealized' (First Buyers)
-                        else if (e.realized !== undefined || e.unrealized !== undefined) {
-                            pnl = (e.realized || 0) + (e.unrealized || 0);
-                        }
-
-                        // Prioritize 'roi' field.
-                        let roi = e.roi !== undefined ? e.roi : 0;
-                        
-                        // Fallback ROI calculation only if 'roi' is missing and we have invested amount
-                        if (e.roi === undefined && e.total_invested && e.total_invested > 0) {
-                             roi = (pnl / e.total_invested) * 100;
-                        }
-                        
-                        totalPnl += pnl;
-                        totalRoi += roi;
-                        if (pnl > 0) wins++;
-                    }
-
-                    results.push({
-                        address,
-                        type,
-                        occurrences: uniqueTokens.size,
-                        tokens: Array.from(uniqueTokens),
-                        total_pnl: totalPnl,
-                        avg_roi: totalRoi / entries.length,
-                        win_rate: Math.round((wins / entries.length) * 100),
-                        data_points: entries
-                    });
-                }
-            }
-            return results.sort((a, b) => b.occurrences - a.occurrences || b.total_pnl - a.total_pnl);
-        };
-
-        setRecurringBuyers(processMap(buyerMap, 'early_buyer'));
-        setRecurringTraders(processMap(traderMap, 'top_trader'));
-
-    } catch (err) {
-        setError("Failed to complete scan. Please try again.");
-    } finally {
-        setLoading(false);
-    }
   };
 
   return (
@@ -181,29 +40,7 @@ export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ tokens
            </div>
        </div>
 
-       {loading && (
-           <div className="bg-skin-card p-8 rounded-xl border-2 border-skin-border text-center">
-               <div className="w-12 h-12 border-4 border-skin-border border-t-black rounded-full animate-spin mx-auto mb-4"></div>
-               <h3 className="text-lg font-black text-skin-text">Scanning Wallets...</h3>
-               <p className="text-skin-muted font-medium mb-4">Checking {tokens.length} tokens for recurring patterns.</p>
-               <div className="w-full max-w-md mx-auto bg-skin-base h-4 rounded-full border-2 border-skin-border overflow-hidden">
-                   <div 
-                       className="h-full bg-green-500 transition-all duration-500 ease-out"
-                       style={{ width: `${(progress.current / progress.total) * 100}%` }}
-                   ></div>
-               </div>
-               <p className="text-xs font-bold mt-2 text-skin-muted">{progress.current} / {progress.total} requests completed</p>
-           </div>
-       )}
-
-       {error && (
-           <div className="bg-red-100 border-2 border-red-200 text-red-800 p-4 rounded-xl font-bold flex items-center gap-2">
-               <AlertCircle size={20} />
-               {error}
-           </div>
-       )}
-
-       {!loading && (recurringBuyers.length > 0 || recurringTraders.length > 0) && (
+       {recurringWallets.length > 0 && (
            <div className="bg-skin-card rounded-xl border-2 border-skin-border shadow-[4px_4px_0px_0px_var(--color-shadow)] overflow-hidden">
                 {/* Content */}
                 <div className="overflow-x-auto max-h-[600px]">
@@ -220,7 +57,7 @@ export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ tokens
                             </tr>
                         </thead>
                         <tbody className="divide-y-2 divide-skin-border/10 bg-skin-card">
-                            {(activeTab === 'early_buyers' ? recurringBuyers : recurringTraders).map((wallet, i) => (
+                            {recurringWallets.map((wallet, i) => (
                                 <tr key={i} className="hover:bg-skin-base transition-colors">
                                     <td className="px-6 py-4 font-mono font-bold text-xs text-skin-text">
                                         {wallet.address.slice(0, 4)}...{wallet.address.slice(-4)}
@@ -266,16 +103,15 @@ export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ tokens
                                     </td>
                                 </tr>
                             ))}
-                            {(activeTab === 'early_buyers' ? recurringBuyers : recurringTraders).length === 0 && (
-                                <tr>
-                                    <td colSpan={7} className="px-6 py-12 text-center text-skin-muted font-bold">
-                                        No recurring wallets found in this category across the analyzed tokens.
-                                    </td>
-                                </tr>
-                            )}
                         </tbody>
                     </table>
                 </div>
+            </div>
+        )}
+
+        {recurringWallets.length === 0 && (
+            <div className="bg-skin-card p-12 text-center text-skin-muted font-bold border-2 border-skin-border rounded-xl shadow-[4px_4px_0px_0px_var(--color-shadow)]">
+                No recurring wallets found in this category across the analyzed tokens.
             </div>
         )}
      </div>
