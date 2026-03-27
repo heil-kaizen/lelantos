@@ -118,6 +118,7 @@ export interface AnalysisResult {
   overlaps: WalletOverlap[];
   processedTokens: TokenInfo[];
   tokenMap: Record<string, TokenInfo>;
+  recurringWallets?: RecurringWallet[];
   timestamp: number;
 }
 
