@@ -1,118 +1,89 @@
-# 🕵️‍♂️ Lelantos - Solana Intelligence & Wallet Analysis
+# Lelantos On-Chain Analysis Tool
 
-**Lelantos** is a powerful open-source intelligence tool designed for the Solana blockchain. It specializes in detecting **overlapping wallets**, analyzing **recurring traders**, and uncovering **side-wallets** (sybil/insider behavior) across multiple token launches.
+Lelantos is a professional-grade Solana blockchain intelligence platform. It is designed to uncover hidden patterns, coordinated trading groups, and "smart money" movements by analyzing the intersection of wallet activities across multiple tokens.
 
-Built with **React**, **Vite**, and **Tailwind CSS**, it leverages the **SolanaTracker** and **Helius** APIs to provide deep on-chain insights.
+Unlike standard explorers that show data for a single token, Lelantos specializes in cross-token correlation, helping traders and researchers identify recurring actors in the Solana ecosystem.
 
-![Lelantos Dashboard](https://raw.githubusercontent.com/heil-kaizen/NOFace/main/lelantos.webp)
+## Core Analysis Modules
 
----
+### 1. Multi-Token Overlap Analysis
+This module identifies "Diamond Hand" clusters and coordinated communities. By inputting a list of token addresses (mint addresses), Lelantos scans the current holder lists for every token provided.
+- **How it works:** It fetches the top holders for each token and maps every wallet address to the tokens they hold.
+- **Insight:** If a single wallet holds 3 out of 5 tokens in your list, it is flagged as an "Overlap." This often indicates a loyal community member, a coordinated "shill" group, or a smart wallet following a specific developer's narrative.
 
-## 🚀 Features
+### 2. Recurring Early Buyers Scan
+This module tracks the "Snipers" and the "First-In" traders who consistently enter positions within the first few minutes of a token launch.
+- **How it works:** It queries the historical "First Buyers" data for each token mint. It then aggregates these lists to find wallets that appear in the "Early Buyer" category for multiple tokens.
+- **Insight:** Finding a wallet that was a top 50 buyer for 3 different successful tokens is a strong signal of a professional sniper or an insider wallet.
 
-### 1. **Recurring Wallet Finder (Overlapping Wallets)**
-- **Input:** A list of Solana token addresses (CA).
-- **Analysis:** Scans the holder lists and top traders of all entered tokens.
-- **Output:** Identifies wallets that appear in multiple tokens.
-- **Insight:** Helps detect coordinated groups, cabals, or recurring "smart money" traders.
-- **Metrics:** Calculates Win Rate, Total PnL, and ROI for these recurring wallets.
+### 3. Recurring Top Traders Scan
+This module identifies the most profitable traders across a specific set of tokens.
+- **How it works:** It retrieves the "Top Traders" list (ranked by PnL and ROI) for each token. It then cross-references these lists to find wallets that are "Top Traders" in more than one asset.
+- **Insight:** This reveals "Smart Money" wallets that have a proven track record of high-performance trading across various market conditions.
 
-### 2. **Smart Wallet Intelligence**
-- **Deep Dive:** Analyzes specific wallets to reveal their trading behavior.
-- **PnL Analysis:** Tracks realized and unrealized profits.
-- **Tagging:** Auto-tags wallets (e.g., "Sniper", "Whale", "Early Buyer") based on on-chain actions.
+### 4. Connected Wallets Trace (Helius Integration)
+A deep-dive tool to reveal wallet clusters and distribution networks.
+- **How it works:** By providing a single wallet address, Lelantos uses the Helius Digital Asset Standard (DAS) and Enhanced Transactions API to trace all SOL transfers.
+- **Insight:** It classifies connected wallets as "Main -> Wallet" (Distribution) or "Wallet -> Main" (Consolidation), helping you see if a developer is distributing supply across multiple "clean" wallets.
 
-### 3. **Connected Wallet Detection (Side-Wallets)**
-- **Sybil Detection:** Uses **Helius API** to trace funding sources.
-- **Logic:** Detects if a wallet has sent/received ≥ 0.5 SOL to/from other wallets.
-- **Visualization:** Maps out clusters of connected wallets to expose insider networks.
+## Technical Architecture and Logic
 
----
+### Rate Limit and Credit Optimization
+To ensure the application remains stable and respects API provider limits, Lelantos uses a custom **Request Queue System**:
+- **Sequential Processing:** Requests are chained together to prevent overlapping calls.
+- **Strict Delays:** A mandatory 2000ms (2 second) delay is enforced between every fetch operation. This prevents "429 Too Many Requests" errors and ensures your API keys are not temporarily banned.
+- **Deduplication:** The input layer automatically trims whitespace and removes duplicate token addresses before the analysis begins, saving you time and API credits.
 
-## 🛠️ Tech Stack
+### Advanced Data Merging
+The tool performs complex data normalization on the fly:
+- **PnL Calculation:** It merges "Realized PnL" (actual profit from closed positions) and "Unrealized PnL" (current value of open positions) to give you a "Total PnL" metric.
+- **ROI Estimation:** If the API does not provide a direct ROI percentage, Lelantos calculates it manually using the `(Total PnL / Total Invested) * 100` formula.
 
-- **Frontend:** React 18, TypeScript, Vite
-- **Styling:** Tailwind CSS, Lucide React (Icons)
-- **Charts:** Recharts
-- **Data APIs:**
-  - [SolanaTracker API](https://docs.solanatracker.io/) (Market Data, Holders)
-  - [Helius API](https://docs.helius.xyz/) (RPC, Transactions, Webhooks)
+### System Filtering
+Lelantos maintains a "Blacklist" of known Solana infrastructure addresses. It automatically filters out:
+- Raydium Authority and Vault addresses (V4 and CLMM).
+- Serum and OpenBook program addresses.
+- Magic Eden and Tensor marketplace authorities.
+- Token Metadata and System Rent programs.
+This ensures that the "Top Traders" you see are actual human traders, not automated liquidity pool contracts.
 
----
+## UI and Workflow Features
 
-## ⚙️ Installation & Setup
+### Sticky Sidebar and Persistent History
+The dashboard is designed for high-intensity research:
+- **Sticky Sidebar:** On desktop, the input form stays fixed to the left. You can scroll through hundreds of results on the right while the buttons and input fields remain accessible.
+- **Analysis History:** Results are appended to the page. You can run an "Overlap" scan, then a "Top Trader" scan, and both will remain on the screen for side-by-side comparison.
+- **One-of-each-type Logic:** If you run the same analysis again with new tokens, the app replaces only that specific section (e.g., the old "Early Buyers" section is replaced by the new one), keeping your dashboard organized.
 
-### 1. Clone the Repository
-```bash
-git clone https://github.com/yourusername/lelantos.git
-cd lelantos
-```
+## Getting Started and API Configuration
 
-### 2. Install Dependencies
-```bash
-npm install
-# or
-yarn install
-```
+### 1. Obtain Your API Keys
+To use Lelantos, you need keys from two providers:
 
-### 3. Configure Environment Variables
-Create a `.env` file in the root directory. You will need API keys from **SolanaTracker** and **Helius**.
+#### Solana Tracker API (Required for all core analysis)
+1. Visit [Solana Tracker](https://www.solanatracker.io/).
+2. Sign up for an account and navigate to the API Dashboard.
+3. Generate an API Key. This key powers the Token Info, Holder Lists, Top Traders, and Early Buyers data.
 
-```env
-# .env
-VITE_SOLANA_TRACKER_API_KEY=your_solana_tracker_api_key_here
-VITE_HELIUS_API_KEY=your_helius_api_key_here
-```
+#### Helius API (Optional, for Wallet Tracing)
+1. Visit [Helius.dev](https://www.helius.dev/).
+2. Create a free account and get your API Key.
+3. This key is required for the "Connected Wallets Analysis" section at the bottom of the app.
 
-> **Note:** The application uses `import.meta.env` to access these variables. Ensure they are prefixed with `VITE_`.
+### 2. Local Installation
+1. Clone the repository to your local machine.
+2. Open your terminal and run `npm install` to download all necessary dependencies.
+3. Create a file named `.env` in the root folder of the project.
+4. Add your keys to the `.env` file exactly like this:
+   ```env
+   VITE_SOLANA_TRACKER_API_KEY=your_solana_tracker_key_here
+   VITE_HELIUS_API_KEY=your_helius_key_here
+   ```
 
-### 4. Run Development Server
-```bash
-npm run dev
-```
-The app will be available at `http://localhost:3000`.
+### 3. Running the App
+1. Run `npm run dev` in your terminal.
+2. Open your browser to the URL provided (usually `http://localhost:3000`).
+3. Enter at least two Solana token mint addresses (e.g., `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`) and click an analysis button to begin.
 
----
-
-## 📦 Building for Production
-
-To create a production-ready build:
-
-```bash
-npm run build
-```
-The output will be in the `dist/` folder, ready to be deployed to Vercel, Netlify, or any static host.
-
----
-
-## ☁️ Deployment (Vercel)
-
-1. **Push** your code to a GitHub repository.
-2. **Import** the project into Vercel.
-3. **Environment Variables:**
-   In the Vercel Dashboard > Settings > Environment Variables, add:
-   - `VITE_SOLANA_TRACKER_API_KEY`
-   - `VITE_HELIUS_API_KEY`
-4. **Deploy!**
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
----
-
-## 📝 License
-
-Distributed under the MIT License. See `LICENSE` for more information.
-
----
-
-**Disclaimer:** This tool is for educational and research purposes only. Blockchain data analysis is probabilistic; always verify on-chain data manually before making financial decisions.
+## License
+This project is licensed under the MIT License.
