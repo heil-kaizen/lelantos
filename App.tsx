@@ -31,6 +31,13 @@ const App: React.FC = () => {
   }, [theme]);
 
   const handleAnalyze = async (tokens: string[], selectedMode: AnalysisMode) => {
+    const uniqueTokens = Array.from(new Set(tokens.map(t => t.trim()).filter(t => t !== '')));
+    
+    if (uniqueTokens.length < 2) {
+      setError("Please enter at least 2 unique token addresses.");
+      return;
+    }
+
     if (!apiKey) {
       setError("API Key not found. Please set VITE_SOLANA_TRACKER_API_KEY in your environment variables.");
       return;
@@ -49,20 +56,13 @@ const App: React.FC = () => {
       
       if (selectedMode === AnalysisMode.OVERLAPS) {
         const result = await service.analyzeTokens({
-          tokens,
+          tokens: uniqueTokens,
           apiKey: apiKey
         });
         setResults(prev => ({ ...prev, [AnalysisMode.OVERLAPS]: result }));
       } else {
-        const processedTokens = await Promise.all(
-          tokens.map(t => service.getTokenInfo(t))
-        );
-        const result = {
-          overlaps: [],
-          processedTokens,
-          tokenMap: Object.fromEntries(processedTokens.map(t => [t.token, t])),
-          timestamp: Date.now()
-        };
+        const type = selectedMode === AnalysisMode.EARLY_BUYERS ? 'early_buyer' : 'top_trader';
+        const result = await service.analyzeRecurringWallets(uniqueTokens, type);
         setResults(prev => ({ ...prev, [selectedMode]: result }));
       }
 
@@ -240,7 +240,7 @@ const App: React.FC = () => {
                     ) : (
                       <div className="bg-skin-card p-6 rounded-xl border-2 border-skin-border shadow-[4px_4px_0px_0px_var(--color-shadow)]">
                         <EarlyBuyersAnalysis 
-                          tokens={results[activeMode]!.processedTokens} 
+                          result={results[activeMode]!} 
                           apiKey={apiKey} 
                           initialTab={activeMode === AnalysisMode.EARLY_BUYERS ? 'early_buyers' : 'top_traders'}
                         />
