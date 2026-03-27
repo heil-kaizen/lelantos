@@ -173,7 +173,9 @@ export class SolanaTrackerService {
       const url = `${BASE_URL}/first-buyers/${token}`;
       try {
           const data = await this.safeFetch(url);
-          return Array.isArray(data) ? data : [];
+          // The API might return an object with a 'buyers' property
+          const buyers = Array.isArray(data) ? data : (data.buyers || []);
+          return buyers;
       } catch (e) {
           console.warn(`Failed to fetch first buyers for ${token}`, e);
           return [];
@@ -181,6 +183,105 @@ export class SolanaTrackerService {
   }
 
   // --- ANALYSIS LOGIC ---
+
+  async analyzeRecurringWallets(tokens: string[], type: 'early_buyer' | 'top_trader'): Promise<AnalysisResult> {
+    const processedTokens: TokenInfo[] = [];
+    const walletMap = new Map<string, any[]>();
+    const tokenMap: Record<string, TokenInfo> = {};
+
+    const EXCLUDED_ADDRESSES = new Set([
+        '5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1', // Raydium Authority
+        '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8', // Raydium V4
+        'srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX', // Serum
+        'SysvarRent111111111111111111111111111111111', // Rent
+        'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', // Token Program
+        'TSWAPaqyCSx2KABk68Shruf4rp7CxcNi8hAsbdwmHbN', // Tensor
+        'M2mx93ekt1fmXSVkTrUL9xVFHkmME8HTUi5Cyc5aF7K', // Magic Eden
+        'C6v1x1gY1x1gY1x1gY1x1gY1x1gY1x1gY1x1gY1x1gY', // Metaplex
+        'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s', // Token Metadata
+        'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK', // Raydium CLMM
+        '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin', // Serum V3
+    ]);
+
+    for (const t of tokens) {
+        const cleanToken = t.trim();
+        if (!cleanToken) continue;
+
+        try {
+            const info = await this.getTokenInfo(cleanToken);
+            processedTokens.push(info);
+            tokenMap[cleanToken] = info;
+
+            if (type === 'early_buyer') {
+                const buyers = await this.getFirstBuyers(cleanToken);
+                for (const b of buyers) {
+                    if (EXCLUDED_ADDRESSES.has(b.wallet)) continue;
+                    if (!walletMap.has(b.wallet)) walletMap.set(b.wallet, []);
+                    walletMap.get(b.wallet)?.push({ ...b, tokenSymbol: info.symbol });
+                }
+            } else {
+                const traders = await this.getTopTraders(cleanToken);
+                for (const tr of traders) {
+                    const wallet = tr.wallet || tr.owner || tr.address;
+                    if (wallet && !EXCLUDED_ADDRESSES.has(wallet) && wallet !== cleanToken) {
+                        if (!walletMap.has(wallet)) walletMap.set(wallet, []);
+                        walletMap.get(wallet)?.push({ ...tr, tokenSymbol: info.symbol });
+                    }
+                }
+            }
+        } catch (e) {
+            console.error(`Failed recurring analysis for ${cleanToken}`, e);
+        }
+    }
+
+    const recurringWallets: RecurringWallet[] = [];
+    for (const [address, entries] of walletMap.entries()) {
+        const uniqueTokens = new Set(entries.map(e => e.tokenSymbol));
+        if (uniqueTokens.size >= 2) {
+            let totalPnl = 0;
+            let totalRoi = 0;
+            let wins = 0;
+
+            for (const e of entries) {
+                let pnl = 0;
+                if (e.pnl !== undefined) pnl = e.pnl;
+                else if (e.realized !== undefined || e.unrealized !== undefined) {
+                    pnl = (e.realized || 0) + (e.unrealized || 0);
+                }
+
+                let roi = e.roi !== undefined ? e.roi : 0;
+                if (e.roi === undefined && e.total_invested && e.total_invested > 0) {
+                    roi = (pnl / e.total_invested) * 100;
+                }
+
+                totalPnl += pnl;
+                totalRoi += roi;
+                if (pnl > 0) wins++;
+            }
+
+            recurringWallets.push({
+                address,
+                type,
+                occurrences: uniqueTokens.size,
+                tokens: Array.from(uniqueTokens),
+                total_pnl: totalPnl,
+                avg_roi: totalRoi / entries.length,
+                win_rate: Math.round((wins / entries.length) * 100),
+                data_points: entries
+            });
+        }
+    }
+
+    recurringWallets.sort((a, b) => b.occurrences - a.occurrences || b.total_pnl - a.total_pnl);
+
+    return {
+        overlaps: [],
+        processedTokens,
+        tokenMap,
+        recurringWallets,
+        timestamp: Date.now()
+    };
+  }
 
   async analyzeTokens(config: AnalysisConfig): Promise<AnalysisResult> {
     const { tokens } = config;
