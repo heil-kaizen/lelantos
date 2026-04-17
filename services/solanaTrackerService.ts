@@ -1,4 +1,4 @@
-import { AnalysisConfig, AnalysisResult, Holder, TokenInfo, WalletOverlap, TopTraderMatch, WalletSummary, FirstBuyer } from '../types';
+import { AnalysisConfig, AnalysisResult, Holder, TokenInfo, WalletOverlap, TopTraderMatch, WalletSummary, FirstBuyer, RecurringWallet } from '../types';
 
 const BASE_URL = "https://data.solanatracker.io";
 
