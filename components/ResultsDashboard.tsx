@@ -71,6 +71,56 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, the
     setTimeout(() => setCopied(null), 2000);
   };
 
+  const toggleWalletSelection = (address: string) => {
+      const next = new Set(selectedWallets);
+      if (next.has(address)) {
+          next.delete(address);
+      } else {
+          next.add(address);
+      }
+      setSelectedWallets(next);
+  };
+
+  const toggleAllSelection = () => {
+      if (selectedWallets.size === results.overlaps.length) {
+          setSelectedWallets(new Set());
+      } else {
+          setSelectedWallets(new Set(results.overlaps.map(o => o.address)));
+      }
+  };
+
+  const handleExport = (selectedOnly: boolean) => {
+      const walletsToExport = selectedOnly 
+          ? sortedOverlaps.filter(o => selectedWallets.has(o.address))
+          : sortedOverlaps;
+
+      if (walletsToExport.length === 0) return;
+
+      const exportData = walletsToExport.map((overlap) => {
+          // Find 1-based index in the sorted list
+          const index = sortedOverlaps.findIndex(o => o.address === overlap.address) + 1;
+          
+          // Generate symbols string (e.g. "bpw" for BONK, PEPE, WIF)
+          const symbolsStr = overlap.tokens
+              .map(t => (results.tokenMap[t]?.symbol || 'u').charAt(0).toLowerCase())
+              .join('');
+              
+          return {
+              address: overlap.address,
+              name: `O_${symbolsStr}_${index}`,
+              emoji: "😀"
+          };
+      });
+
+      const jsonString = JSON.stringify(exportData, null, 2);
+      navigator.clipboard.writeText(jsonString);
+      
+      // Temporary feedback
+      const originalCopied = copied;
+      setCopied('exported');
+      setTimeout(() => setCopied(originalCopied), 2000);
+  };
+
   // Sort logic
   const sortedOverlaps = [...results.overlaps].sort((a, b) => {
     switch (sortBy) {
@@ -212,10 +262,33 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, the
       {/* Detailed List */}
       <div className="bg-skin-card rounded-xl border-2 border-skin-border overflow-hidden shadow-[4px_4px_0px_0px_var(--color-shadow)]">
         <div className="p-6 border-b-2 border-skin-border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-skin-base">
-            <h3 className="text-lg font-black text-skin-text">Smart Wallet Intelligence</h3>
+            <h3 className="text-lg font-black text-skin-text flex items-center gap-4">
+                Smart Wallet Intelligence
+                
+                {/* Export Controls */}
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => handleExport(true)}
+                        disabled={selectedWallets.size === 0}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all border-2 border-skin-border disabled:opacity-50 disabled:cursor-not-allowed bg-blue-100 text-blue-700 hover:bg-blue-200"
+                    >
+                        <Download size={14} />
+                        Export Selected ({selectedWallets.size})
+                    </button>
+                    <button
+                        onClick={() => handleExport(false)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all border-2 border-skin-border bg-skin-card text-skin-text hover:bg-skin-muted/10 shadow-[2px_2px_0px_0px_var(--color-shadow)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+                    >
+                        <Download size={14} />
+                        Export All
+                    </button>
+                    {copied === 'exported' && <span className="text-xs font-bold text-green-500 animate-pulse">Copied!</span>}
+                </div>
+            </h3>
             
             <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-skin-muted uppercase">Sort By:</span>
+
                 <div className="flex bg-skin-card rounded-lg border-2 border-skin-border p-1 shadow-[2px_2px_0px_0px_var(--color-shadow)]">
                     <button 
                         onClick={() => setSortBy('score')}
