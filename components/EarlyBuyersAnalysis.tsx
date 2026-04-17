@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { AnalysisResult, RecurringWallet } from '../types';
-import { Wallet, TrendingUp, DollarSign, Clock, AlertCircle, ArrowUp, ArrowDown, Search, X, Trophy, Copy, CheckCircle, Users, ExternalLink } from 'lucide-react';
+import { Wallet, TrendingUp, DollarSign, Clock, AlertCircle, ArrowUp, ArrowDown, Search, X, Trophy, Copy, CheckCircle, Users, ExternalLink, Download, CheckSquare, Square } from 'lucide-react';
 
 interface EarlyBuyersAnalysisProps {
   result: AnalysisResult;
@@ -11,6 +11,7 @@ interface EarlyBuyersAnalysisProps {
 export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ result, apiKey, initialTab = 'early_buyers' }) => {
   const [activeTab] = useState<'early_buyers' | 'top_traders'>(initialTab);
   const [copied, setCopied] = useState<string | null>(null);
+  const [selectedWallets, setSelectedWallets] = useState<Set<string>>(new Set());
 
   const recurringWallets = result.recurringWallets || [];
 
@@ -22,6 +23,56 @@ export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ result
 
   const formatUSD = (val: number) => {
       return `$${val.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  };
+
+  const toggleWalletSelection = (address: string) => {
+      const next = new Set(selectedWallets);
+      if (next.has(address)) {
+          next.delete(address);
+      } else {
+          next.add(address);
+      }
+      setSelectedWallets(next);
+  };
+
+  const toggleAllSelection = () => {
+      if (selectedWallets.size === recurringWallets.length) {
+          setSelectedWallets(new Set());
+      } else {
+          setSelectedWallets(new Set(recurringWallets.map(w => w.address)));
+      }
+  };
+
+  const handleExport = (selectedOnly: boolean) => {
+      const walletsToExport = selectedOnly 
+          ? recurringWallets.filter(w => selectedWallets.has(w.address))
+          : recurringWallets;
+
+      if (walletsToExport.length === 0) return;
+
+      const exportData = walletsToExport.map((wallet) => {
+          // Find 1-based index in the original list
+          const index = recurringWallets.findIndex(w => w.address === wallet.address) + 1;
+          const prefix = wallet.type === 'early_buyer' ? 'E' : 'T';
+          
+          // tokens here are symbols like ["BONK", "WIF"]
+          const symbolsStr = (wallet.tokens || [])
+              .map(t => (t || 'u').charAt(0).toLowerCase())
+              .join('');
+              
+          return {
+              address: wallet.address,
+              name: `${prefix}_${symbolsStr}_${index}`,
+              emoji: "😀"
+          };
+      });
+
+      const jsonString = JSON.stringify(exportData, null, 2);
+      navigator.clipboard.writeText(jsonString);
+      
+      const originalCopied = copied;
+      setCopied('exported');
+      setTimeout(() => setCopied(originalCopied), 2000);
   };
 
   return (
@@ -38,6 +89,27 @@ export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ result
                     : 'Identify wallets that appear as Top Traders across multiple tokens.'}
                </p>
            </div>
+           
+           {recurringWallets.length > 0 && (
+               <div className="flex items-center gap-2">
+                   <button
+                       onClick={() => handleExport(true)}
+                       disabled={selectedWallets.size === 0}
+                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all border-2 border-skin-border disabled:opacity-50 disabled:cursor-not-allowed bg-blue-100 text-blue-700 hover:bg-blue-200"
+                   >
+                       <Download size={14} />
+                       Export Selected ({selectedWallets.size})
+                   </button>
+                   <button
+                       onClick={() => handleExport(false)}
+                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all border-2 border-skin-border bg-skin-card text-skin-text hover:bg-skin-muted/10 shadow-[2px_2px_0px_0px_var(--color-shadow)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+                   >
+                       <Download size={14} />
+                       Export All
+                   </button>
+                   {copied === 'exported' && <span className="text-xs font-bold text-green-500 animate-pulse">Copied!</span>}
+               </div>
+           )}
        </div>
 
        {recurringWallets.length > 0 && (
@@ -47,6 +119,14 @@ export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ result
                     <table className="w-full text-sm text-left">
                         <thead className="bg-black text-white text-xs uppercase font-bold sticky top-0 z-10">
                             <tr>
+                                <th className="px-4 py-4 w-12 text-center">
+                                    <button onClick={toggleAllSelection} className="align-middle">
+                                        {selectedWallets.size > 0 && selectedWallets.size === recurringWallets.length 
+                                            ? <CheckSquare size={18} className="text-lime-400" />
+                                            : <Square size={18} className="opacity-50 hover:opacity-100" />
+                                        }
+                                    </button>
+                                </th>
                                 <th className="px-6 py-4">Wallet</th>
                                 <th className="px-6 py-4 text-center">Occurrences</th>
                                 <th className="px-6 py-4">Tokens Found In</th>
@@ -57,8 +137,18 @@ export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ result
                             </tr>
                         </thead>
                         <tbody className="divide-y-2 divide-skin-border/10 bg-skin-card">
-                            {recurringWallets.map((wallet, i) => (
-                                <tr key={i} className="hover:bg-skin-base transition-colors">
+                            {recurringWallets.map((wallet, i) => {
+                                const isSelected = selectedWallets.has(wallet.address);
+                                return (
+                                <tr key={i} className={`hover:bg-skin-base transition-colors ${isSelected ? 'bg-skin-muted/5' : ''}`}>
+                                    <td className="px-4 py-4 text-center">
+                                        <button onClick={() => toggleWalletSelection(wallet.address)} className="align-middle border-none bg-transparent">
+                                            {isSelected 
+                                                ? <CheckSquare size={18} className="text-lime-500" />
+                                                : <Square size={18} className="text-skin-muted opacity-30 hover:opacity-100" />
+                                            }
+                                        </button>
+                                    </td>
                                     <td className="px-6 py-4 font-mono font-bold text-xs text-skin-text">
                                         {wallet.address.slice(0, 4)}...{wallet.address.slice(-4)}
                                     </td>
@@ -102,7 +192,8 @@ export const EarlyBuyersAnalysis: React.FC<EarlyBuyersAnalysisProps> = ({ result
                                         </button>
                                     </td>
                                 </tr>
-                            ))}
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
