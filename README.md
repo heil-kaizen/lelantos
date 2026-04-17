@@ -49,6 +49,12 @@ This ensures that the "Top Traders" you see are actual human traders, not automa
 
 ## UI and Workflow Features
 
+### Automated Wallet Export
+Lelantos features a powerful, built-in JSON exporter designed specifically to pipe intelligence data into bots or secondary sorting software:
+- **Selectable Grids:** Checkboxes have been integrated into every result table (Overlaps, Early Buyers, and Top Traders), allowing you to manually currate the lists before exporting.
+- **Bulk Operations:** Each grid contains an "Export Selected" and "Export All" button. 
+- **Formatting:** The export saves directly to your clipboard in a strict, pre-formatted JSON array. It dynamically generates string identifiers based on the feature used (`O` for Overlap, `E` for Early buyers, `T` for Top Traders), followed by the first letters of the held tokens, and finally the numerical rank of the wallet.
+
 ### Sticky Sidebar and Persistent History
 The dashboard is designed for high-intensity research:
 - **Sticky Sidebar:** On desktop, the input form stays fixed to the left. You can scroll through hundreds of results on the right while the buttons and input fields remain accessible.
