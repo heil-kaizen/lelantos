@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AnalysisResult } from '../types';
-import { ExternalLink, Copy, CheckCircle, AlertTriangle, Users, Wallet, TrendingUp } from 'lucide-react';
+import { ExternalLink, Copy, CheckCircle, AlertTriangle, Users, Wallet, TrendingUp, Download, CheckSquare, Square } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { EarlyBuyersAnalysis } from './EarlyBuyersAnalysis';
 import { HeliusService } from '../services/heliusService';
@@ -16,6 +16,8 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, the
   const [copied, setCopied] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'score' | 'portfolio' | 'holdings'>('score');
   const [identities, setIdentities] = useState<Record<string, { domain?: string, social?: string }>>({});
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [selectedWallets, setSelectedWallets] = useState<Set<string>>(new Set());
 
   // Fetch identities for top wallets if Helius Key is provided
   useEffect(() => {
@@ -315,6 +317,14 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, the
             <table className="w-full text-left text-sm text-skin-muted">
                 <thead className="bg-black text-white uppercase font-bold tracking-wider">
                     <tr>
+                        <th className="px-4 py-4 w-12 text-center">
+                            <button onClick={toggleAllSelection} className="align-middle">
+                                {selectedWallets.size > 0 && selectedWallets.size === results.overlaps.length 
+                                    ? <CheckSquare size={18} className="text-lime-400" />
+                                    : <Square size={18} className="opacity-50 hover:opacity-100" />
+                                }
+                            </button>
+                        </th>
                         <th className="px-6 py-4">Wallet / Tags</th>
                         <th className="px-6 py-4 text-center">Score</th>
                         <th className="px-6 py-4">Portfolio</th>
@@ -323,8 +333,23 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, the
                     </tr>
                 </thead>
                 <tbody className="divide-y-2 divide-skin-border/10">
-                    {sortedOverlaps.map((overlap) => (
-                        <tr key={overlap.address} className="hover:bg-skin-base transition-colors font-medium">
+                    {sortedOverlaps.map((overlap) => {
+                        const isExpanded = expandedRow === overlap.address;
+                        const isSelected = selectedWallets.has(overlap.address);
+                        
+                        return (
+                        <React.Fragment key={overlap.address}>
+                        <tr className={`hover:bg-skin-base transition-colors font-medium ${isSelected ? 'bg-skin-muted/5' : ''}`}>
+                            {/* Checkbox */}
+                            <td className="px-4 py-4 text-center w-12">
+                                <button onClick={() => toggleWalletSelection(overlap.address)} className="align-middle border-none bg-transparent">
+                                    {isSelected 
+                                        ? <CheckSquare size={18} className="text-lime-500" />
+                                        : <Square size={18} className="text-skin-muted opacity-30 hover:opacity-100" />
+                                    }
+                                </button>
+                            </td>
+
                             {/* Wallet & Tags */}
                             <td className="px-6 py-4">
                                 <div className="flex flex-col gap-1">
@@ -440,10 +465,12 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, the
                                 </div>
                             </td>
                         </tr>
-                    ))}
+                        </React.Fragment>
+                    );
+                    })}
                     {results.overlaps.length === 0 && (
                         <tr>
-                            <td colSpan={5} className="px-6 py-12 text-center text-skin-muted">
+                            <td colSpan={6} className="px-6 py-12 text-center text-skin-muted">
                                 <div className="flex flex-col items-center justify-center gap-3">
                                     <AlertTriangle size={32} />
                                     <p className="font-bold">No overlaps found.</p>
